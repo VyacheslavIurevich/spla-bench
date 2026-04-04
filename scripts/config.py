@@ -324,17 +324,19 @@ Note: All datasets are taken from http://sparse.tamu.edu/
 
 """
 DATASET_URL: Dict[str, str] = {
-    '1128_bus': 'https://suitesparse-collection-website.herokuapp.com/MM/HB/1138_bus.tar.gz',
-    'bcspwr03': 'https://suitesparse-collection-website.herokuapp.com/MM/HB/bcspwr03.tar.gz',
-    'soc-LiveJournal': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/soc-LiveJournal1.tar.gz',
-    'hollywood-09': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/hollywood-2009.tar.gz',
-    'Journals': 'https://suitesparse-collection-website.herokuapp.com/MM/Pajek/Journals.tar.gz',
-    'com-Orcut': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/com-Orkut.tar.gz',
-    'roadNet-CA': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/roadNet-CA.tar.gz',
-    'indochina-2004': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/indochina-2004.tar.gz',
-    'cit-Patents': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/cit-Patents.tar.gz',
     'coAuthorsCiteseer': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coAuthorsCiteseer.tar.gz',
-    'coPapersDBLP': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coPapersDBLP.tar.gz'
+    'coPapersDBLP': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coPapersDBLP.tar.gz',
+    'amazon-2008': 'https://suitesparse-collection-website.herokuapp.com/RB/LAW/amazon-2008.tar.gz',
+    'hollywood-2009': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/hollywood-2009.tar.gz',
+    'belgium_osm': 'https://suitesparse-collection-website.herokuapp.com/RB/DIMACS10/belgium_osm.tar.gz',
+    'roadNet-CA': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/roadNet-CA.tar.gz',
+    'com-Orkut': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/com-Orkut.tar.gz',
+    'cit-Patents': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/cit-Patents.tar.gz',
+    'rgg_n_2_22_s0': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/rgg_n_2_22_s0.tar.gz',
+    'soc-LiveJournal': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/soc-LiveJournal1.tar.gz',
+    'indochina-2004': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/indochina-2004.tar.gz',
+    'rgg_n_2_23_s0': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/rgg_n_2_23_s0.tar.gz',
+    'road_central': 'https://suitesparse-collection-website.herokuapp.com/RB/DIMACS10/road_central.tar.gz'
 }
 
 
