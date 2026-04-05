@@ -358,16 +358,19 @@ or to the .mtx
 
 """
 BENCHMARK_DATASETS = [
-    '1128_bus',
-    'bcspwr03',
-    'soc-LiveJournal',
-    'hollywood-09',
-    'com-Orcut',
-    'roadNet-CA',
-    'indochina-2004',
-    'cit-Patents',
     'coAuthorsCiteseer',
-    'coPapersDBLP'
+    'coPapersDBLP',
+    'amazon-2008',
+    'hollywood-2009',
+    'belgium_osm',
+    'roadNet-CA',
+    'com-Orkut',
+    'cit-Patents',
+    'rgg_n_2_22_s0',
+    'soc-LiveJournal',
+    'indochina-2004',
+    'rgg_n_2_23_s0',
+    'road_central'
 ]
 
 """
