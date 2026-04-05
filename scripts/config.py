@@ -333,7 +333,7 @@ DATASET_URL: Dict[str, str] = {
     'com-Orkut': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/com-Orkut.tar.gz?download=1',
     'cit-Patents': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/cit-Patents.tar.gz?download=1',
     'rgg_n_2_22_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_22_s0.tar.gz?download=1',
-    'soc-LiveJournal': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/soc-LiveJournal.tar.gz?download=1',
+    'soc-LiveJournal1': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/soc-LiveJournal1.tar.gz?download=1',
     'indochina-2004': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/indochina-2004.tar.gz?download=1',
     'rgg_n_2_23_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_23_s0.tar.gz?download=1',
     'road_central': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/road_central.tar.gz?download=1'
@@ -367,8 +367,8 @@ BENCHMARK_DATASETS = [
     'com-Orkut',
     'cit-Patents',
     'rgg_n_2_22_s0',
-    'soc-LiveJournal',
-    'indochina-2004',
+    'soc-LiveJournal1',
+#hangs    'indochina-2004',
     'rgg_n_2_23_s0',
     'road_central'
 ]

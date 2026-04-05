@@ -45,6 +45,8 @@ def download_by_url(url: str, dest: Path):
             archive_contents
         ))
 
+        archive_contents.sort(key=len)
+
         contents_str = archive_contents[0] if len(archive_contents) == 1 else concat(
             *map(lambda s: '\n\t- ' + str(s), archive_contents)
         )
@@ -64,7 +66,7 @@ def download_by_url(url: str, dest: Path):
             dest_folder = util.parent_directory(dest)
             util.print_status('dataset installer',
                               'copying .mtx files',
-                              f'Archive contains more than two .mtx files: {contents_str}',
+                              f'Archive contains more than one .mtx files: {contents_str}',
                               f'\nThey all be put in the {dest_folder}')
 
             srcs = []
