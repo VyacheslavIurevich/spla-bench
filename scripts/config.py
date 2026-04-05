@@ -324,19 +324,19 @@ Note: All datasets are taken from http://sparse.tamu.edu/
 
 """
 DATASET_URL: Dict[str, str] = {
-    'coAuthorsCiteseer': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coAuthorsCiteseer.tar.gz',
-    'coPapersDBLP': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coPapersDBLP.tar.gz',
-    'amazon-2008': 'https://suitesparse-collection-website.herokuapp.com/RB/LAW/amazon-2008.tar.gz',
-    'hollywood-2009': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/hollywood-2009.tar.gz',
-    'belgium_osm': 'https://suitesparse-collection-website.herokuapp.com/RB/DIMACS10/belgium_osm.tar.gz',
-    'roadNet-CA': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/roadNet-CA.tar.gz',
-    'com-Orkut': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/com-Orkut.tar.gz',
-    'cit-Patents': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/cit-Patents.tar.gz',
-    'rgg_n_2_22_s0': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/rgg_n_2_22_s0.tar.gz',
-    'soc-LiveJournal': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/soc-LiveJournal1.tar.gz',
-    'indochina-2004': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/indochina-2004.tar.gz',
-    'rgg_n_2_23_s0': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/rgg_n_2_23_s0.tar.gz',
-    'road_central': 'https://suitesparse-collection-website.herokuapp.com/RB/DIMACS10/road_central.tar.gz'
+    'coAuthorsCiteseer': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/coAuthorsCiteseer.tar.gz?download=1',
+    'coPapersDBLP': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/coPapersDBLP.tar.gz?download=1',
+    'amazon-2008': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/amazon-2008.tar.gz?download=1',
+    'hollywood-2009': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/hollywood-2009.tar.gz?download=1',
+    'belgium_osm': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/belgium_osm.tar.gz?download=1',
+    'roadNet-CA': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/roadNet-CA.tar.gz?download=1',
+    'com-Orkut': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/com-Orkut.tar.gz?download=1',
+    'cit-Patents': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/cit-Patents.tar.gz?download=1',
+    'rgg_n_2_22_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_22_s0.tar.gz?download=1',
+    'soc-LiveJournal': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/soc-LiveJournal.tar.gz?download=1',
+    'indochina-2004': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/indochina-2004.tar.gz?download=1',
+    'rgg_n_2_23_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_23_s0.tar.gz?download=1',
+    'road_central': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/road_central.tar.gz?download=1'
 }
 
 
