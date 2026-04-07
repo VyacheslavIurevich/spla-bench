@@ -98,9 +98,9 @@ TOOL_CONFIG: Dict[ToolName, ToolConfigurations] = {
         sources=DEPS / 'lagraph',
         build=DEPS / 'lagraph' / 'build',
         algo_rel={
-            AlgorithmName.bfs:  Path('sources') / 'benchmark' / 'bfs_demo',
-            AlgorithmName.sssp: Path('sources') / 'benchmark' / 'sssp_demo',
-            AlgorithmName.tc:   Path('sources') / 'benchmark' / 'tc_demo'
+            AlgorithmName.bfs:  Path('src') / 'benchmark' / 'bfs_demo',
+            AlgorithmName.sssp: Path('src') / 'benchmark' / 'sssp_demo',
+            AlgorithmName.tc:   Path('src') / 'benchmark' / 'tc_demo'
         },
         config=Namespace()
     ),
@@ -199,12 +199,12 @@ and set corresponding values to non-null values
 SUITESPARSE = Namespace(
 
     # Paths to the local version of suitesparse
-    local=Namespace(
+    local=None,#Namespace(
         # Path to the include directory (Ex. "../graphblas/include/")
-        include=None,
+        #include=None,
         # Path to the library (Ex. "../graphblas/lib/libgraphblas.so")
-        library=None
-    ),
+        #library=None
+    #),
 
     # GitHub repository information
     repo=Namespace(

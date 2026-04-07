@@ -22,9 +22,10 @@ TOOL_BUILDERS = {
 
 def rebuild(builder: Callable[[], None], targets: List[Path]):
     builder()
+    targets_str = map(str, targets)
     if not check_paths_exist(targets):
         not_built = '\n\t' + \
-            '\n\t'.join(filter(lambda t: not t.exists(), targets))
+            '\n\t'.join(filter(lambda t: not Path(t).exists(), targets_str))
         raise Exception(f'Not all targets were built:{not_built}')
 
 

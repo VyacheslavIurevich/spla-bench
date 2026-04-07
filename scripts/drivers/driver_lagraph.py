@@ -12,13 +12,13 @@ from lib.util import check_output
 
 class DriverLaGraph(Driver):
     def can_run_bfs(self, dataset: Dataset) -> bool:
-        raise NotImplementedError()
+        return True
 
     def can_run_sssp(self, dataset: Dataset) -> bool:
-        raise NotImplementedError()
+        return True
 
     def can_run_tc(self, dataset: Dataset) -> bool:
-        raise NotImplementedError()
+        return True
 
     def run_bfs(self,
                 dataset: Dataset,
