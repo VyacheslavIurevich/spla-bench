@@ -23,13 +23,13 @@ class ExecutionResult:
     times: List[int]
 
     def avg(self):
-        return statistics.mean(self.times)
+        return statistics.mean(self.times) if self.times else 0.0
 
     def median(self):
-        return statistics.median(self.times)
+        return statistics.median(self.times) if self.times else 0.0
 
     def stdev(self):
-        return statistics.stdev(self.times)
+        return statistics.stdev(self.times) if len(self.times) >= 2 else 0.0
 
     def brief_str(self) -> str:
         return f'warm_up={self.warm_up:.2f}ms, avg={self.avg():.2f}ms, median={self.median():.2f}ms, stdev={self.stdev():.2f}'
@@ -68,6 +68,10 @@ class Driver:
 
     @abc.abstractmethod
     def can_run_tc(self, dataset: Dataset) -> bool:
+        return False
+    
+    @abc.abstractmethod
+    def can_run_pr(self, dataset: Dataset) -> bool:
         return False
 
     @abc.abstractmethod
@@ -114,6 +118,19 @@ class Driver:
         pass
 
     @abc.abstractmethod
+    def run_pr(self,
+               dataset: Dataset,
+               num_iterations: int) -> ExecutionResult:
+        """
+        Run pagerank algorithm benchmark.
+
+        :param dataset: Dataset with its properties to run on
+        :param num_iterations: Number of iteration to run
+        :return: execution results
+        """
+        pass
+
+    @abc.abstractmethod
     def tool_name(self) -> ToolName:
         """
         :return: Name of the underhood tool
@@ -133,7 +150,8 @@ class Driver:
         can_run = {
             AlgorithmName.bfs: self.can_run_bfs,
             AlgorithmName.sssp: self.can_run_sssp,
-            AlgorithmName.tc: self.can_run_tc
+            AlgorithmName.tc: self.can_run_tc,
+            AlgorithmName.pr: self.can_run_pr
         }
         return can_run[algo](dataset)
 
@@ -145,12 +163,18 @@ class Driver:
         dataset_category = dataset.get_category()
 
         iterations = dataset_category.iterations()
-        source = config.DEFAULT_SOURCE
+
+        if algo in [AlgorithmName.bfs, AlgorithmName.sssp]:
+            source = config.find_best_source(
+                str(dataset.path), str(dataset.name), is_directed=dataset.get_directed()
+            )
+        else:
+            source = config.DEFAULT_SOURCE
 
         self.print_status('run',
                           f'begin {algo.name}',
                           f'iterations={iterations}',
-                          f'soure={source}')
+                          f'soure={source}' if algo in [AlgorithmName.bfs, AlgorithmName.sssp] else '')
 
         result: ExecutionResult = None
 
@@ -160,6 +184,8 @@ class Driver:
             result = self.run_sssp(dataset, source, iterations)
         elif algo == AlgorithmName.tc:
             result = self.run_tc(dataset, iterations)
+        elif algo == AlgorithmName.pr:
+            result = self.run_pr(dataset, iterations)
 
         self.print_status(
             'run', f'finish {str(algo.name)}', result.brief_str())

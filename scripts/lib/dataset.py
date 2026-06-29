@@ -47,7 +47,9 @@ def download_by_url(url: str, dest: Path):
 
         archive_contents.sort(key=lambda x: len(x.name))
 
-        contents_str = archive_contents[0] if len(archive_contents) == 1 else ''.join('\n\t- ' + str(s) for s in archive_contents)
+        contents_str = archive_contents[0] if len(archive_contents) == 1 else ''.join(
+            '\n\t- ' + str(s) for s in archive_contents
+        )
 
         if not archive_contents:
             raise Exception(

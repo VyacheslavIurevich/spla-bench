@@ -67,6 +67,9 @@ def suitesparse_build() -> Tuple[Path, Path]:
         cwd=output_directory
     )
 
+    if not gb_build.exists():
+        os.makedirs(gb_build)
+
     print(f'Building GraphBLAS in the {gb_build}')
 
     env = config.make_build_env()
@@ -91,9 +94,9 @@ def suitesparse_build() -> Tuple[Path, Path]:
 
 
 class SuitesparseMethod(Enum):
-    local = 'local',
-    build = 'build',
-    download = 'downlod'
+    local = 'local'
+    build = 'build'
+    download = 'download'
 
     def __str__(self):
         return self.value
@@ -161,7 +164,7 @@ def chosen_method_targets() -> List[Path]:
 
 
 def build():
-    graphblas_include, graphblas_library = suitesparse_build()
+    graphblas_include, graphblas_library = suitesparse_do_chosen_method()
 
     graphblas_include = graphblas_include.absolute()
     graphblas_library = graphblas_library.absolute()
@@ -180,8 +183,8 @@ def build():
         os.makedirs(lagraph_build_dir)
 
     env = config.make_build_env()
-    env['GRAPHBLAS_INCLUDE_DIR'] = graphblas_include
-    env['GRAPHBLAS_LIBRARY'] = graphblas_library
+    env['GRAPHBLAS_INCLUDE_DIR'] = str(graphblas_include)
+    env['GRAPHBLAS_LIBRARY'] = str(graphblas_library)
 
     check_call(
         [
@@ -201,4 +204,5 @@ def build():
         cwd=lagraph_build_dir
     )
 
-    os.symlink(lagraph_build_dir, LAGRAPH_PATHS.build)
+    if not LAGRAPH_PATHS.build.exists() and not LAGRAPH_PATHS.build.is_symlink():
+        os.symlink(lagraph_build_dir, LAGRAPH_PATHS.build)

@@ -11,13 +11,16 @@ from lib.util import check_output
 
 
 class DriverLaGraph(Driver):
-    def can_run_bfs(self, dataset: Dataset) -> bool:
+    def can_run_bfs(self, _: Dataset) -> bool:
         return True
 
-    def can_run_sssp(self, dataset: Dataset) -> bool:
+    def can_run_sssp(self, _: Dataset) -> bool:
         return True
 
-    def can_run_tc(self, dataset: Dataset) -> bool:
+    def can_run_tc(self, _: Dataset) -> bool:
+        return True
+
+    def can_run_pr(self, _: Dataset) -> bool:
         return True
 
     def run_bfs(self,
@@ -32,7 +35,7 @@ class DriverLaGraph(Driver):
                 sources_file.name
             ])
 
-            return DriverLaGraph._parse_output(output, "parent only", 9, "warmup", 4)
+            return DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
 
     def run_sssp(self,
                  dataset: Dataset,
@@ -43,7 +46,8 @@ class DriverLaGraph(Driver):
             output = check_output([
                 self.exec_path(AlgorithmName.sssp),
                 dataset.path,
-                sources_file.name
+                sources_file.name,
+                '1'
             ])
 
             return DriverLaGraph._parse_output(output, "sssp", 8)
@@ -58,6 +62,17 @@ class DriverLaGraph(Driver):
         ])
 
         return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
+
+    def run_pr(self,
+               dataset: Dataset,
+               num_iterations: int) -> ExecutionResult:
+
+        output = check_output([
+            self.exec_path(AlgorithmName.pr),
+            dataset.path
+        ])
+
+        return DriverLaGraph._parse_output(output, "trial:", 3, "warmup:", 1)
 
     def tool_name(self) -> ToolName:
         return ToolName.lagraph

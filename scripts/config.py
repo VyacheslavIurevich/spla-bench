@@ -12,6 +12,13 @@ import lib.util as util
 from lib.tool import ToolName
 from lib.algorithm import AlgorithmName
 
+# To select the starting vertex
+import numpy as np
+from scipy.io import mmread
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+from typing import Dict
+
 
 """
 System information
@@ -100,7 +107,8 @@ TOOL_CONFIG: Dict[ToolName, ToolConfigurations] = {
         algo_rel={
             AlgorithmName.bfs:  Path('src') / 'benchmark' / 'bfs_demo',
             AlgorithmName.sssp: Path('src') / 'benchmark' / 'sssp_demo',
-            AlgorithmName.tc:   Path('src') / 'benchmark' / 'tc_demo'
+            AlgorithmName.tc:   Path('src') / 'benchmark' / 'tc_demo',
+            AlgorithmName.pr:   Path('src') / 'benchmark' / 'gappagerank_demo'
         },
         config=Namespace()
     ),
@@ -109,9 +117,10 @@ TOOL_CONFIG: Dict[ToolName, ToolConfigurations] = {
         sources=DEPS / 'spla',
         build=DEPS / 'spla' / 'build',
         algo_rel={
-            AlgorithmName.bfs:  Path('spla_bfs'),
-            AlgorithmName.sssp: Path('spla_sssp'),
-            AlgorithmName.tc:   Path('spla_tc')
+            AlgorithmName.bfs:  Path('bfs'),
+            AlgorithmName.sssp: Path('sssp'),
+            AlgorithmName.tc:   Path('tc'),
+            AlgorithmName.pr:   Path('pr')
         },
         config=Namespace()
     ),
@@ -199,12 +208,15 @@ and set corresponding values to non-null values
 SUITESPARSE = Namespace(
 
     # Paths to the local version of suitesparse
-    local=None,#Namespace(
-        # Path to the include directory (Ex. "../graphblas/include/")
-        #include=None,
-        # Path to the library (Ex. "../graphblas/lib/libgraphblas.so")
-        #library=None
-    #),
+    local=None,
+
+    # Uncomment, if you want to use a local SuiteSparse.GraphBLAS build
+    # local=Namespace(
+    #     # Path to the include directory (Ex. "../graphblas/include/")
+    #     include=None,
+    #     # Path to the library (Ex. "../graphblas/lib/libgraphblas.so")
+    #     library=None
+    # ),
 
     # GitHub repository information
     repo=Namespace(
@@ -284,7 +296,7 @@ class DatasetSize(Enum):
     small = DatasetSizeInfo(max_n_edges=80000, iterations=20)
     medium = DatasetSizeInfo(max_n_edges=500000, iterations=10)
     large = DatasetSizeInfo(max_n_edges=2000000, iterations=5)
-    extra_large = DatasetSizeInfo(max_n_edges=None, iterations=2)
+    extra_large = DatasetSizeInfo(max_n_edges=None, iterations=3)
 
     def iterations(self):
         return self.value.iterations
@@ -348,6 +360,63 @@ Default source for the path-finding algorithms (bfs, sssp)
 """
 DEFAULT_SOURCE = 0
 
+# Cache to avoid recalculating for the same dataset multiple times
+_source_cache: Dict[str, int] = {
+    'coAuthorsCiteseer': 4,
+    'coPapersDBLP': 21,
+    'hollywood-2009': 46,
+    'belgium_osm': 0,
+    'roadNet-CA': 0,
+    'rgg_n_2_22_s0': 1,
+    'road_central': 4,
+}
+
+def find_best_source(mtx_path: str, dataset_name: str, is_directed: bool) -> int:
+    """
+    The vertex with the median degree in the largest connected component.
+    Returns a 0-based index.
+    """
+    print(f"Finding best source vertex for {dataset_name}")
+    if dataset_name in _source_cache:
+        return _source_cache[dataset_name]
+
+    mat = mmread(mtx_path)
+    A = csr_matrix(mat)
+    A.data[:] = 1
+    n = A.shape[0]
+
+    if is_directed:
+        _, labels = connected_components(
+            A, directed=True, connection='strong', return_labels=True)
+    else:
+        _, labels = connected_components(
+            A, directed=False, return_labels=True)
+
+    component_sizes = np.bincount(labels)
+    largest_id = int(np.argmax(component_sizes))
+    largest_size = component_sizes[largest_id]
+    print(f"  Largest component: {largest_size} vertices ({100.0 * largest_size / n:.1f}%)")
+
+    vertices = np.where(labels == largest_id)[0]
+    degrees = np.array(A[vertices].sum(axis=1)).flatten()
+
+    non_sink_mask = degrees > 0
+    if non_sink_mask.sum() == 0:
+        print("  Warning: all vertices in largest component are sinks, picking first")
+        best_vertex = int(vertices[0])
+    else:
+        vertices = vertices[non_sink_mask]
+        degrees = degrees[non_sink_mask]
+        median_degree = np.median(degrees)
+        closest_idx = int(np.argmin(np.abs(degrees - median_degree)))
+        best_vertex = int(vertices[closest_idx])
+        print(f"  Best source: vertex={best_vertex}, "
+              f"out_degree={int(degrees[closest_idx])}, "
+              f"median={median_degree:.1f}")
+
+    _source_cache[dataset_name] = best_vertex
+    return best_vertex
+
 
 """
 List of the datasets, which will be used for the benchmark
@@ -361,14 +430,15 @@ BENCHMARK_DATASETS = [
     'coAuthorsCiteseer',
     'coPapersDBLP',
     'amazon-2008',
-    'hollywood-2009',
+    # crashes on LaGraph BFS
+    # 'hollywood-2009',
     'belgium_osm',
     'roadNet-CA',
     'com-Orkut',
     'cit-Patents',
     'rgg_n_2_22_s0',
     'soc-LiveJournal1',
-#hangs    'indochina-2004',
+    # hangs 'indochina-2004',
     'rgg_n_2_23_s0',
     'road_central'
 ]

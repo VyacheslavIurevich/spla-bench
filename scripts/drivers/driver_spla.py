@@ -9,12 +9,15 @@ from lib.util import check_output
 
 class DriverSpla(driver.Driver):
     def can_run_bfs(self, dataset: Dataset) -> bool:
-        return dataset.get_element_type() == DatasetValueType.void
+        return True
 
     def can_run_sssp(self, dataset: Dataset) -> bool:
-        return dataset.get_element_type() == DatasetValueType.float
+        return True
 
     def can_run_tc(self, dataset: Dataset) -> bool:
+        return True
+
+    def can_run_pr(self, dataset: Dataset) -> bool:
         return True
 
     def run_bfs(self,
@@ -59,6 +62,19 @@ class DriverSpla(driver.Driver):
         ])
         return DriverSpla._parse_output(output)
 
+    def run_pr(self,
+               dataset: Dataset,
+               num_iterations: int) -> driver.ExecutionResult:
+
+        output = check_output([
+            self.exec_path(AlgorithmName.pr),
+            f"--mtxpath={dataset.path}",
+            f"--niters={num_iterations}",
+            f"--eps=1e-4"
+        ])
+
+        return DriverSpla._parse_output(output)
+
     def tool_name(self) -> ToolName:
         return ToolName.spla
 
@@ -68,8 +84,22 @@ class DriverSpla(driver.Driver):
         warmup = 0.0
         runs = []
         for line in lines:
-            if line.startswith("warm-up(ms):"):
-                warmup = float(line.split(" ")[1])
-            if line.startswith("iters(ms):"):
-                runs = [float(v) for v in line.split(" ")[1:-1]]
+            # Parse GPU timings if available, otherwise use CPU timings
+            if line.startswith("gpu(ms):"):
+                timings_str = line.replace("gpu(ms):", "").strip()
+                timings = [
+                    float(v.strip()) for v in timings_str.split(",") if v.strip()
+                ]
+                if timings:
+                    warmup = timings[0]
+                    runs = timings[1:] if len(timings) > 1 else []
+            elif line.startswith("cpu(ms):") and not runs:
+                timings_str = line.replace("cpu(ms):", "").strip()
+                timings = [
+                    float(v.strip()) for v in timings_str.split(",") if v.strip()
+                ]
+                if timings:
+                    warmup = timings[0]
+                    runs = timings[1:] if len(timings) > 1 else []
+
         return driver.ExecutionResult(warmup, runs)
