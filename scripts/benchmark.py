@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from pathlib import Path
 
 from typing import List
 
@@ -104,7 +105,7 @@ def main():
                         driver.tool_name(), dataset, algo, result)
                 print_status(status_algo_dataset, 'finish benchmarking')
     finally:
-        summary.dump(args.format, args.output, args.printer)
+        summary.dump(args.format, Path(args.output), args.printer)
 
 
 if __name__ == '__main__':
