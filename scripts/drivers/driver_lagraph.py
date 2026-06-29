@@ -72,7 +72,7 @@ class DriverLaGraph(Driver):
             dataset.path
         ])
 
-        return DriverLaGraph._parse_output(output, "trial:", 3, "warmup:", 1)
+        return DriverLaGraph._parse_output(output, "Avg: PR", 4)
 
     def tool_name(self) -> ToolName:
         return ToolName.lagraph
@@ -91,8 +91,10 @@ class DriverLaGraph(Driver):
                           trial_line_token]) * time_factor)
         warmup = 0
         if warmup_line_start is not None:
-            warmup = float(tokenize(lines_startswith(lines, warmup_line_start)[0])[
-                           warmup_line_token]) * time_factor
+            warmup_lines = lines_startswith(lines, warmup_line_start)
+            if warmup_lines:
+                warmup = float(tokenize(warmup_lines[0])[
+                               warmup_line_token]) * time_factor
         return ExecutionResult(warmup, trials)
 
 
