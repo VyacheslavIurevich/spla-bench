@@ -77,6 +77,40 @@ class DriverLaGraph(Driver):
     def tool_name(self) -> ToolName:
         return ToolName.lagraph
 
+    def _build_command(self,
+                       dataset: Dataset,
+                       algo: AlgorithmName,
+                       source: int,
+                       iterations: int) -> List[str]:
+        if algo == AlgorithmName.bfs:
+            self.sources_file = TemporarySourcesFile([source + 1] * iterations)
+            self.sources_file.__enter__()
+            return [
+                str(self.exec_path(AlgorithmName.bfs)),
+                str(dataset.path),
+                self.sources_file.name
+            ]
+        if algo == AlgorithmName.sssp:
+            self.sources_file = TemporarySourcesFile([source + 1] * iterations)
+            self.sources_file.__enter__()
+            return [
+                str(self.exec_path(AlgorithmName.sssp)),
+                str(dataset.path),
+                self.sources_file.name,
+                '1'
+            ]
+        if algo == AlgorithmName.tc:
+            return [str(self.exec_path(AlgorithmName.tc)), str(dataset.path)]
+        if algo == AlgorithmName.pr:
+            return [str(self.exec_path(AlgorithmName.pr)), str(dataset.path)]
+        raise Exception(f"Algorithm {algo} not supported")
+
+    def _cleanup_profile_command(self) -> None:
+        sources_file = getattr(self, 'sources_file', None)
+        if sources_file is not None:
+            sources_file.__exit__(None, None, None)
+            self.sources_file = None
+
     @staticmethod
     def _parse_output(output: bytes,
                       trial_line_start: str,

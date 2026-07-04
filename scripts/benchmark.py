@@ -19,10 +19,10 @@ from drivers.driver_spla import DriverSpla
 from drivers.driver import Driver
 
 
-def tool_to_driver(tool: ToolName) -> Driver:
+def tool_to_driver(tool: ToolName, profiler_manager=None) -> Driver:
     drivers = {
-        ToolName.spla: lambda _: DriverSpla(),
-        ToolName.lagraph: lambda _: DriverLaGraph(),
+        ToolName.spla: lambda _: DriverSpla(profiler_manager),
+        ToolName.lagraph: lambda _: DriverLaGraph(profiler_manager),
         ToolName.gunrock: lambda _: DriverGunrock(),
         ToolName.graphblast: lambda _: DriverGraphBLAST(),
     }
@@ -54,14 +54,36 @@ def main():
                         choices=list(ResultsPrinter),
                         default=ResultsPrinter.all,
                         help='Measurement printer')
+    parser.add_argument('--profile',
+                        action='store_true',
+                        help='Enable CPU and GPU profiling')
+    parser.add_argument('--cpu-profile',
+                        action='store_true',
+                        help='Enable CPU profiling')
+    parser.add_argument('--gpu-profile',
+                        action='store_true',
+                        help='Enable GPU profiling')
+    parser.add_argument('--flamegraph',
+                        action='store_true',
+                        help='Generate flamegraphs from CPU profiles')
 
     args = parser.parse_args()
 
+    profiler_manager = None
+    if args.profile or args.cpu_profile or args.gpu_profile or args.flamegraph:
+        from profiling.profiler_manager import create_profiler_manager
+
+        profiler_manager = create_profiler_manager(
+            cpu=args.cpu_profile or args.profile,
+            gpu=args.gpu_profile or args.profile,
+            flamegraph=args.flamegraph,
+            output_dir=Path(args.output) / 'profiling')
+
     drivers: List[Driver] = []
     if args.tool is None:
-        drivers = map(tool_to_driver, list(ToolName))
+        drivers = map(lambda tool: tool_to_driver(tool, profiler_manager), list(ToolName))
     else:
-        drivers = [tool_to_driver(args.tool)]
+        drivers = [tool_to_driver(args.tool, profiler_manager)]
 
     algorithms: List[AlgorithmName] = []
     if args.algo is None:
@@ -106,6 +128,8 @@ def main():
                 print_status(status_algo_dataset, 'finish benchmarking')
     finally:
         summary.dump(args.format, Path(args.output), args.printer)
+        if profiler_manager:
+            profiler_manager.cleanup()
 
 
 if __name__ == '__main__':

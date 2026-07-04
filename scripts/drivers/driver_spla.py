@@ -1,5 +1,6 @@
 import drivers.driver as driver
 
+from typing import List
 from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.tool import ToolName
@@ -77,6 +78,42 @@ class DriverSpla(driver.Driver):
 
     def tool_name(self) -> ToolName:
         return ToolName.spla
+
+    def _build_command(self,
+                       dataset: Dataset,
+                       algo: AlgorithmName,
+                       source: int,
+                       iterations: int) -> List[str]:
+        if algo == AlgorithmName.bfs:
+            return [
+                str(self.exec_path(AlgorithmName.bfs)),
+                f"--mtxpath={dataset.path}",
+                f"--niters={iterations}",
+                f"--source={source}"
+            ]
+        if algo == AlgorithmName.sssp:
+            return [
+                str(self.exec_path(AlgorithmName.sssp)),
+                f"--mtxpath={dataset.path}",
+                f"--niters={iterations}",
+                f"--source={source}"
+            ]
+        if algo == AlgorithmName.tc:
+            dir_flag = 'true' if not dataset.get_directed() else 'false'
+            return [
+                str(self.exec_path(AlgorithmName.tc)),
+                f"--mtxpath={dataset.path}",
+                f"--niters={iterations}",
+                f"--undirected={dir_flag}"
+            ]
+        if algo == AlgorithmName.pr:
+            return [
+                str(self.exec_path(AlgorithmName.pr)),
+                f"--mtxpath={dataset.path}",
+                f"--niters={iterations}",
+                f"--eps=1e-4"
+            ]
+        raise Exception(f"Algorithm {algo} not supported")
 
     @staticmethod
     def _parse_output(output):

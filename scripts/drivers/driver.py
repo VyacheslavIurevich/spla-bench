@@ -3,7 +3,7 @@ import statistics
 
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 import lib.util as util
 import config as config
@@ -21,6 +21,7 @@ class ExecutionResult:
     """
     warm_up: int
     times: List[int]
+    profiling: Optional[object] = None
 
     def avg(self):
         return statistics.mean(self.times) if self.times else 0.0
@@ -32,7 +33,14 @@ class ExecutionResult:
         return statistics.stdev(self.times) if len(self.times) >= 2 else 0.0
 
     def brief_str(self) -> str:
-        return f'warm_up={self.warm_up:.2f}ms, avg={self.avg():.2f}ms, median={self.median():.2f}ms, stdev={self.stdev():.2f}'
+        result = f'warm_up={self.warm_up:.2f}ms, avg={self.avg():.2f}ms, median={self.median():.2f}ms, stdev={self.stdev():.2f}'
+        if self.profiling and self.profiling.has_cpu_data():
+            result += ', profile=cpu'
+        if self.profiling and self.profiling.has_gpu_data():
+            result += ', profile=gpu'
+        if self.profiling and self.profiling.has_flamegraph():
+            result += ', flamegraph'
+        return result
 
     def __str__(self) -> str:
         return self.brief_str()
@@ -42,7 +50,8 @@ class ExecutionResult:
 
 
 class Driver:
-    def __init__(self):
+    def __init__(self, profiler_manager: Optional[object] = None):
+        self.profiler_manager = profiler_manager
         self.build()
 
     """
@@ -69,7 +78,7 @@ class Driver:
     @abc.abstractmethod
     def can_run_tc(self, dataset: Dataset) -> bool:
         return False
-    
+
     @abc.abstractmethod
     def can_run_pr(self, dataset: Dataset) -> bool:
         return False
@@ -178,16 +187,45 @@ class Driver:
 
         result: ExecutionResult = None
 
-        if algo == AlgorithmName.bfs:
-            result = self.run_bfs(dataset, source, iterations)
-        elif algo == AlgorithmName.sssp:
-            result = self.run_sssp(dataset, source, iterations)
-        elif algo == AlgorithmName.tc:
-            result = self.run_tc(dataset, iterations)
-        elif algo == AlgorithmName.pr:
-            result = self.run_pr(dataset, iterations)
+        if self.profiler_manager:
+            profiling_iterations = config.DEFAULT_PROFILING_ITERATIONS.get(
+                dataset_category, iterations)
+            result = self._run_with_profiling(
+                dataset, algo, source, profiling_iterations)
+        else:
+            if algo == AlgorithmName.bfs:
+                result = self.run_bfs(dataset, source, iterations)
+            elif algo == AlgorithmName.sssp:
+                result = self.run_sssp(dataset, source, iterations)
+            elif algo == AlgorithmName.tc:
+                result = self.run_tc(dataset, iterations)
+            elif algo == AlgorithmName.pr:
+                result = self.run_pr(dataset, iterations)
 
         self.print_status(
             'run', f'finish {str(algo.name)}', result.brief_str())
 
         return result
+
+    def _run_with_profiling(self,
+                            dataset: Dataset,
+                            algo: AlgorithmName,
+                            source: int,
+                            iterations: int) -> ExecutionResult:
+        command = self._build_command(dataset, algo, source, iterations)
+        try:
+            profiling_result = self.profiler_manager.run_profiling(
+                command, self.tool_name(), dataset, algo, iterations)
+        finally:
+            self._cleanup_profile_command()
+        return ExecutionResult(warm_up=0.0, times=[0.0], profiling=profiling_result)
+
+    def _build_command(self,
+                       dataset: Dataset,
+                       algo: AlgorithmName,
+                       source: int,
+                       iterations: int) -> List[str]:
+        raise NotImplementedError("Subclasses must implement _build_command")
+
+    def _cleanup_profile_command(self) -> None:
+        pass

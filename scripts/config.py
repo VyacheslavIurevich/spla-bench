@@ -482,3 +482,48 @@ def make_build_env() -> Dict[str, str]:
     print(f'Using env: {additional_vars}')
 
     return env
+
+
+"""
+Profiling configuration
+
+[MUTABLE]
+
+"""
+
+@dataclass
+class ProfilingConfig:
+    cpu_profiling: bool = False
+    gpu_profiling: bool = False
+    flamegraph: bool = False
+    hardware_counters: bool = False
+
+
+PROFILING = ProfilingConfig()
+
+
+"""
+Path to directory for profiling results
+
+After each profiling run, results will be stored here.
+Each run creates a timestamped subdirectory.
+
+[MUTABLE]
+
+"""
+PROFILING_OUTPUT = ROOT / 'profiling'
+
+
+"""
+Default profiling settings for different dataset sizes
+
+[MUTABLE]
+
+"""
+DEFAULT_PROFILING_ITERATIONS = {
+    DatasetSize.tiny: 5,
+    DatasetSize.small: 3,
+    DatasetSize.medium: 2,
+    DatasetSize.large: 1,
+    DatasetSize.extra_large: 1,
+}
