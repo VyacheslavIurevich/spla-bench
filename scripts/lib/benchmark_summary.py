@@ -28,6 +28,9 @@ class OutputFormat(Enum):
     raw = 'txt'
     csv = 'csv'
 
+    def __str__(self) -> str:
+        return self.value
+
     def extension(self):
         return f'.{self.value}'
 

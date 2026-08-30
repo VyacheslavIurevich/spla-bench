@@ -19,6 +19,19 @@ from drivers.driver_spla import DriverSpla
 from drivers.driver import Driver
 
 
+def parse_output_format(value: str) -> OutputFormat:
+    try:
+        return OutputFormat(value)
+    except ValueError:
+        try:
+            return OutputFormat[value]
+        except KeyError:
+            choices = ', '.join(sorted({f.name for f in OutputFormat} |
+                                       {f.value for f in OutputFormat}))
+            raise argparse.ArgumentTypeError(
+                f"invalid output format: {value} (choose from: {choices})")
+
+
 def tool_to_driver(tool: ToolName, profiler_manager=None) -> Driver:
     drivers = {
         ToolName.spla: lambda _: DriverSpla(profiler_manager),
@@ -45,7 +58,7 @@ def main():
                         default=config.BENCHMARK_OUTPUT,
                         help='File to dump benchmark results')
     parser.add_argument('--format',
-                        type=OutputFormat,
+                        type=parse_output_format,
                         choices=list(OutputFormat),
                         default=OutputFormat.csv,
                         help='Format to dump benchmark results')
