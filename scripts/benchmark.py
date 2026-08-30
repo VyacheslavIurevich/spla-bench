@@ -87,7 +87,7 @@ def main():
         from profiling.profiler_manager import create_profiler_manager
 
         profiler_manager = create_profiler_manager(
-            cpu=args.cpu_profile or args.profile,
+            cpu=args.cpu_profile or args.profile or args.flamegraph,
             gpu=args.gpu_profile or args.profile,
             flamegraph=args.flamegraph,
             output_dir=Path(args.output) / 'profiling')

@@ -17,6 +17,7 @@ class ProfileResult:
     gpu_timeline: Optional[Path] = None
     gpu_memory: Optional[Path] = None
     flamegraph_svg: Optional[Path] = None
+    flamegraph_html: Optional[Path] = None
     raw_output: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -30,7 +31,7 @@ class ProfileResult:
 
     def has_flamegraph(self) -> bool:
         """Check if flamegraph is available"""
-        return self.flamegraph_svg is not None
+        return self.flamegraph_svg is not None or self.flamegraph_html is not None
 
 
 class Profiler(ABC):

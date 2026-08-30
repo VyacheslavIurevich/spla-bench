@@ -114,14 +114,15 @@ class ProfilerManager:
                 flamegraph_file = (
                     self.output_dir
                     / "flamegraphs"
-                    / f"{tool}_{algo}_{dataset.name}.svg"
+                    / f"{tool}_{algo}_{dataset.name}.html"
                 )
                 flamegraph_file.parent.mkdir(parents=True, exist_ok=True)
 
-                if self.flamegraph_generator.generate_flamegraph(
+                if self.flamegraph_generator.generate_interactive_flamegraph(
                     profiling_result.cpu_callgraph, flamegraph_file
                 ):
-                    profiling_result.flamegraph_svg = flamegraph_file
+                    profiling_result.flamegraph_html = flamegraph_file
+                    profiling_result.flamegraph_svg = flamegraph_file.with_suffix(".svg")
 
         if (
             self.config.gpu_profiling
