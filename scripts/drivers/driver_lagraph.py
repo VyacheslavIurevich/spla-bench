@@ -121,7 +121,14 @@ class DriverLaGraph(Driver):
 
         output = raw_output.encode('ASCII', errors='ignore')
         if algo == AlgorithmName.bfs:
-            return DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
+            result = DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
+            if result.times:
+                return result
+
+            avg_lines = lines_startswith(raw_output.split("\n"), "Avg: BFS")
+            if avg_lines:
+                result.times = [float(tokenize(avg_lines[0])[7]) * 1000]
+            return result
         if algo == AlgorithmName.sssp:
             return DriverLaGraph._parse_output(output, "sssp", 8)
         if algo == AlgorithmName.tc:

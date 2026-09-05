@@ -224,7 +224,7 @@ SUITESPARSE = Namespace(
         branch='v6.1.4',
 
         # Repository local path (where it will be cloned)
-        dest=DEPS/'suitesparse_graphblast',
+        dest=DEPS/'suitesparse_graphblas',
 
         # Relative path to the include directory from the repository root
         include_rel=Path('Include'),
@@ -242,7 +242,7 @@ SUITESPARSE = Namespace(
     # Uncomment, if you want to download the library
     # download=Namespace(
     #     url=f'https://anaconda.org/conda-forge/graphblas/{CONDA_GRB_REPO.version}/download/{CONDA_GRB_REPO.platform}/graphblas-{CONDA_GRB_REPO.version}-{CONDA_GRB_REPO.hash}_0.tar.bz2',
-    #     dest=DEPS/'suitesparse_graphblast_conda',
+    #     dest=DEPS/'suitesparse_graphblas_conda',
     #     include_rel=Path('include'),
     #     library_rel=Path('lib') / 'libgraphblas' + TARGET_SUFFIX
     # )

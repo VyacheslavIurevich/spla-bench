@@ -240,7 +240,8 @@ class Dataset:
         cached_element_type = DatasetPropertiesCache.get(self.name, 'element_type')
 
         if cached_directed is None:
-            graph_kind = 'directed=unknown'
+            cached_directed = self.get_directed()
+            graph_kind = 'directed' if cached_directed else 'undirected'
         else:
             graph_kind = 'directed' if cached_directed else 'undirected'
 
