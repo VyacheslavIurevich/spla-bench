@@ -104,6 +104,7 @@ class ProfilerManager:
             cpu_result = self.cpu_profiler.profile(command, metadata)
             profiling_result.cpu_callgraph = cpu_result.cpu_callgraph
             profiling_result.cpu_hardware_counters = cpu_result.cpu_hardware_counters
+            profiling_result.raw_output = cpu_result.raw_output
 
             if (
                 self.config.flamegraph
@@ -133,6 +134,7 @@ class ProfilerManager:
             gpu_result = self.gpu_profiler.profile(command, metadata)
             profiling_result.gpu_timeline = gpu_result.gpu_timeline
             profiling_result.gpu_memory = gpu_result.gpu_memory
+            profiling_result.raw_output = gpu_result.raw_output or profiling_result.raw_output
 
         return profiling_result
 

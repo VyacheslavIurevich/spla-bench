@@ -33,19 +33,27 @@ class CPUProfiler(Profiler):
             return False
         return True
 
+    def _output_base(self, prefix: str, metadata: Dict[str, Any]) -> Path:
+        parts = [
+            prefix,
+            metadata.get("tool"),
+            metadata.get("algo"),
+            metadata.get("dataset"),
+        ]
+        filename = "_".join(str(part).replace("/", "_") for part in parts if part)
+        return self.get_output_file(filename)
+
     def profile_callgraph(
         self, command: List[str], metadata: Dict[str, Any]
     ) -> ProfileResult:
         """Profile with CPU callgraph"""
-        output_file = self.get_output_file(
-            f"callgraph_{metadata.get('tool')}_{metadata.get('algo')}"
-        )
+        output_file = self._output_base("callgraph", metadata)
         perf_file = output_file.with_suffix(".perf")
 
         print(f"Running callgraph profiling: {' '.join(command)}")
 
         try:
-            subprocess.run(
+            process = subprocess.run(
                 [
                     self.perf_path,
                     "record",
@@ -62,7 +70,11 @@ class CPUProfiler(Profiler):
                 text=True,
             )
 
-            result = ProfileResult(cpu_callgraph=perf_file, metadata=metadata)
+            result = ProfileResult(
+                cpu_callgraph=perf_file,
+                raw_output=process.stdout,
+                metadata=metadata,
+            )
             return result
 
         except subprocess.CalledProcessError as e:
@@ -89,9 +101,7 @@ class CPUProfiler(Profiler):
         ]
 
         try:
-            output_file = self.get_output_file(
-                f"counters_{metadata.get('tool')}_{metadata.get('algo')}"
-            )
+            output_file = self._output_base("counters", metadata)
 
             with open(output_file.with_suffix(".txt"), "w") as f:
                 process = subprocess.run(
@@ -123,6 +133,7 @@ class CPUProfiler(Profiler):
         result = ProfileResult(
             cpu_callgraph=callgraph_result.cpu_callgraph,
             cpu_hardware_counters=counters_result.cpu_hardware_counters,
+            raw_output=callgraph_result.raw_output,
             metadata=metadata,
         )
         return result

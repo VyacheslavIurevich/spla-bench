@@ -82,15 +82,37 @@ class GPUProfiler(Profiler):
         print(f"Intel GPU detected: {self.intel_gpu_info.get('gpu_model', 'Unknown')}")
         return True
 
+    def _output_base(self, prefix: str, metadata: Dict[str, Any]) -> Path:
+        parts = [
+            prefix,
+            metadata.get("tool"),
+            metadata.get("algo"),
+            metadata.get("dataset"),
+        ]
+        filename = "_".join(str(part).replace("/", "_") for part in parts if part)
+        return self.get_output_file(filename)
+
+    def _update_gpu_info_from_output(self, stdout: str) -> None:
+        for line in stdout.splitlines():
+            if not line.startswith("env:") or "device:" not in line:
+                continue
+
+            env_part, device_part = line.split("device:", 1)
+            device_name = device_part.split("vendor:", 1)[0].strip()
+            platform_name = env_part.replace("env:", "", 1).strip()
+
+            if device_name:
+                self.intel_gpu_info["device_name"] = device_name
+            if platform_name:
+                self.intel_gpu_info["platform_name"] = platform_name
+
     def profile(self, command: List[str], metadata: Dict[str, Any]) -> ProfileResult:
         """Run GPU profiling with basic monitoring for Intel GPU"""
         print(
             f"Running Intel GPU profiling for {metadata.get('tool')} {metadata.get('algo')}"
         )
 
-        output_file = self.get_output_file(
-            f"intel_gpu_{metadata.get('tool')}_{metadata.get('algo')}"
-        )
+        output_file = self._output_base("intel_gpu", metadata)
         analysis_file = output_file.with_suffix(".txt")
         timing_file = output_file.with_suffix(".timing")
 
@@ -137,6 +159,7 @@ class GPUProfiler(Profiler):
             gpu_patterns = self._analyze_gpu_output(
                 command_result.stdout, command_result.stderr
             )
+            self._update_gpu_info_from_output(command_result.stdout)
 
             # Save comprehensive GPU analysis
             analysis_file_path = str(analysis_file).replace('"', "")
@@ -148,6 +171,9 @@ class GPUProfiler(Profiler):
                 f.write("=== GPU Device Information ===\n")
                 f.write(
                     f"Device Name: {self.intel_gpu_info.get('device_name', 'Unknown')}\n"
+                )
+                f.write(
+                    f"Platform Name: {self.intel_gpu_info.get('platform_name', 'Unknown')}\n"
                 )
                 f.write(
                     f"Platform Version: {self.intel_gpu_info.get('platform_version', 'Unknown')}\n"
@@ -210,7 +236,7 @@ class GPUProfiler(Profiler):
 
             result = ProfileResult(
                 metadata=metadata,
-                raw_output=analysis_file.read_text() if analysis_file.exists() else None,
+                raw_output=command_result.stdout,
                 gpu_timeline=Path(analysis_file_path),
             )
 
@@ -304,14 +330,18 @@ class GPUProfiler(Profiler):
                     except:
                         pass
                 elif "Elapsed" in line:
+                    time_str = ""
                     try:
-                        time_str = line.split(":")[1].split(":")[0].strip()
-                        # Try to parse HH:MM:SS format
-                        if ":" in time_str:
-                            h, m, s = map(float, time_str.split(":"))
+                        time_str = line.split("):", 1)[1].strip()
+                        time_parts = list(map(float, time_str.split(":")))
+                        if len(time_parts) == 3:
+                            h, m, s = time_parts
                             timing_info["elapsed"] = h * 3600 + m * 60 + s
+                        elif len(time_parts) == 2:
+                            m, s = time_parts
+                            timing_info["elapsed"] = m * 60 + s
                         else:
-                            timing_info["elapsed"] = float(time_str)
+                            timing_info["elapsed"] = time_parts[0]
                     except:
                         try:
                             timing_info["elapsed"] = float(time_str)
@@ -331,6 +361,8 @@ class GPUProfiler(Profiler):
             "kernel_launches": 0,
             "memory_operations": 0,
             "opencl_errors": 0,
+            "opencl_runtime_detected": False,
+            "spla_gpu_timing_reported": False,
             "performance_issues": [],
         }
 
@@ -357,6 +389,12 @@ class GPUProfiler(Profiler):
         # Check for GPU-specific patterns
         if "kernel" in stdout.lower():
             analysis["kernel_launches"] = stdout.lower().count("kernel")
+
+        if "env: OpenCL Acc" in stdout:
+            analysis["opencl_runtime_detected"] = True
+
+        if "gpu(ms):" in stdout:
+            analysis["spla_gpu_timing_reported"] = True
 
         if "memory" in stdout.lower() or "mem" in stdout.lower():
             analysis["memory_operations"] = stdout.lower().count(

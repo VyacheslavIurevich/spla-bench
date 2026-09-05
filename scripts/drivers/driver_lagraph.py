@@ -111,6 +111,25 @@ class DriverLaGraph(Driver):
             sources_file.__exit__(None, None, None)
             self.sources_file = None
 
+    def _parse_profiled_output(self,
+                               dataset: Dataset,
+                               algo: AlgorithmName,
+                               raw_output: str,
+                               iterations: int) -> ExecutionResult:
+        if raw_output is None:
+            return ExecutionResult(warm_up=0.0, times=[0.0])
+
+        output = raw_output.encode('ASCII', errors='ignore')
+        if algo == AlgorithmName.bfs:
+            return DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
+        if algo == AlgorithmName.sssp:
+            return DriverLaGraph._parse_output(output, "sssp", 8)
+        if algo == AlgorithmName.tc:
+            return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
+        if algo == AlgorithmName.pr:
+            return DriverLaGraph._parse_output(output, "Avg: PR", 4)
+        return ExecutionResult(warm_up=0.0, times=[0.0])
+
     @staticmethod
     def _parse_output(output: bytes,
                       trial_line_start: str,

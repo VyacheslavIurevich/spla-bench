@@ -228,5 +228,28 @@ class Dataset:
         _, _, nvals = matrix.load_header(self.path)
         return nvals
 
+    def get_vertices(self) -> int:
+        n_rows, n_cols, _ = matrix.load_header(self.path)
+        return max(n_rows, n_cols)
+
     def get_category(self) -> config.DatasetSize:
         return config.DatasetSize.from_n_edges(self.get_edges())
+
+    def brief_info(self) -> str:
+        cached_directed = DatasetPropertiesCache.get(self.name, 'directed')
+        cached_element_type = DatasetPropertiesCache.get(self.name, 'element_type')
+
+        if cached_directed is None:
+            graph_kind = 'directed=unknown'
+        else:
+            graph_kind = 'directed' if cached_directed else 'undirected'
+
+        element_type = cached_element_type if cached_element_type is not None else 'unknown'
+
+        return (
+            f'vertices={self.get_vertices()}, '
+            f'edges={self.get_edges()}, '
+            f'{graph_kind}, '
+            f'value_type={element_type}, '
+            f'size={self.get_category().name}'
+        )

@@ -42,6 +42,14 @@ def tool_to_driver(tool: ToolName, profiler_manager=None) -> Driver:
     return drivers[tool](None)
 
 
+def tool_backend(tool: ToolName) -> str:
+    backends = {
+        ToolName.spla: 'gpu',
+        ToolName.lagraph: 'cpu',
+    }
+    return backends.get(tool, 'unknown')
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Bebchmarking tool for the graph algorithms')
@@ -94,7 +102,7 @@ def main():
 
     drivers: List[Driver] = []
     if args.tool is None:
-        drivers = map(lambda tool: tool_to_driver(tool, profiler_manager), list(ToolName))
+        drivers = list(map(lambda tool: tool_to_driver(tool, profiler_manager), list(ToolName)))
     else:
         drivers = [tool_to_driver(args.tool, profiler_manager)]
 
@@ -110,10 +118,16 @@ def main():
     summary = BenchmarkSummary()
 
     try:
+        backend_info = ', '.join(
+            f'{driver.tool_name()}={tool_backend(driver.tool_name())}'
+            for driver in drivers)
+        print_status('configuration', f'backends: {backend_info}')
+
         for dataset_name in config.BENCHMARK_DATASETS:
             print_status(f'dataset {dataset_name}', 'start preparation')
             dataset = Dataset(dataset_name)
-            print_status(f'dataset {dataset_name}', 'finish preparation')
+            print_status(f'dataset {dataset_name}', 'finish preparation',
+                         dataset.brief_info())
 
             for algo in algorithms:
                 status_algo_dataset = f'algo: {algo}, dataset: {dataset.name}'

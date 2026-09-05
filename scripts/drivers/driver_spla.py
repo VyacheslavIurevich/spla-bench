@@ -115,6 +115,15 @@ class DriverSpla(driver.Driver):
             ]
         raise Exception(f"Algorithm {algo} not supported")
 
+    def _parse_profiled_output(self,
+                               dataset: Dataset,
+                               algo: AlgorithmName,
+                               raw_output: str,
+                               iterations: int) -> driver.ExecutionResult:
+        if raw_output is None:
+            return driver.ExecutionResult(warm_up=0.0, times=[0.0])
+        return DriverSpla._parse_output(raw_output.encode('ASCII', errors='ignore'))
+
     @staticmethod
     def _parse_output(output):
         lines = output.decode("ASCII").replace("\r", "").split("\n")
@@ -128,15 +137,21 @@ class DriverSpla(driver.Driver):
                     float(v.strip()) for v in timings_str.split(",") if v.strip()
                 ]
                 if timings:
-                    warmup = timings[0]
-                    runs = timings[1:] if len(timings) > 1 else []
+                    if len(timings) > 1:
+                        warmup = timings[0]
+                        runs = timings[1:]
+                    else:
+                        runs = timings
             elif line.startswith("cpu(ms):") and not runs:
                 timings_str = line.replace("cpu(ms):", "").strip()
                 timings = [
                     float(v.strip()) for v in timings_str.split(",") if v.strip()
                 ]
                 if timings:
-                    warmup = timings[0]
-                    runs = timings[1:] if len(timings) > 1 else []
+                    if len(timings) > 1:
+                        warmup = timings[0]
+                        runs = timings[1:]
+                    else:
+                        runs = timings
 
         return driver.ExecutionResult(warmup, runs)

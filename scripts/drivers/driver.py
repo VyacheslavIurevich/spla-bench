@@ -183,7 +183,7 @@ class Driver:
         self.print_status('run',
                           f'begin {algo.name}',
                           f'iterations={iterations}',
-                          f'soure={source}' if algo in [AlgorithmName.bfs, AlgorithmName.sssp] else '')
+                          f'source={source}' if algo in [AlgorithmName.bfs, AlgorithmName.sssp] else '')
 
         result: ExecutionResult = None
 
@@ -218,7 +218,11 @@ class Driver:
                 command, self.tool_name(), dataset, algo, iterations)
         finally:
             self._cleanup_profile_command()
-        return ExecutionResult(warm_up=0.0, times=[0.0], profiling=profiling_result)
+
+        result = self._parse_profiled_output(
+            dataset, algo, profiling_result.raw_output, iterations)
+        result.profiling = profiling_result
+        return result
 
     def _build_command(self,
                        dataset: Dataset,
@@ -229,3 +233,10 @@ class Driver:
 
     def _cleanup_profile_command(self) -> None:
         pass
+
+    def _parse_profiled_output(self,
+                               dataset: Dataset,
+                               algo: AlgorithmName,
+                               raw_output: Optional[str],
+                               iterations: int) -> ExecutionResult:
+        return ExecutionResult(warm_up=0.0, times=[0.0])
