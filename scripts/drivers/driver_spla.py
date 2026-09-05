@@ -121,7 +121,7 @@ class DriverSpla(driver.Driver):
                                raw_output: str,
                                iterations: int) -> driver.ExecutionResult:
         if raw_output is None:
-            return driver.ExecutionResult(warm_up=0.0, times=[0.0])
+            return driver.ExecutionResult(warm_up=0.0, times=[])
         return DriverSpla._parse_output(raw_output.encode('ASCII', errors='ignore'))
 
     @staticmethod

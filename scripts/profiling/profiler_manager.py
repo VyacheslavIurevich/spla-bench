@@ -143,7 +143,6 @@ class ProfilerManager:
             profiling_result.merge_metrics_from(gpu_result)
             profiling_result.metadata.update(gpu_result.metadata)
 
-        self._write_profile_summary(profiling_result)
         return profiling_result
 
     def cleanup(self):
@@ -168,7 +167,8 @@ class ProfilerManager:
         if self.flamegraph_generator:
             self.flamegraph_generator.cleanup()
 
-    def _write_profile_summary(self, profiling_result: ProfileResult) -> None:
+    def write_profile_summary(self, profiling_result: ProfileResult) -> Path:
+        """Write or refresh the JSON summary after metrics are updated."""
         metadata = profiling_result.metadata
         tool = metadata.get("tool", "unknown")
         algo = metadata.get("algo", "unknown")
@@ -179,8 +179,11 @@ class ProfilerManager:
             / f"summary_{tool}_{algo}_{dataset}.json"
         )
         output_file.parent.mkdir(parents=True, exist_ok=True)
+        profiling_result.metadata["summary_file"] = str(output_file)
         with open(output_file, "w") as f:
             json.dump(profiling_result.to_dict(), f, indent=2)
+        print(f"Profiling JSON summary: {output_file}")
+        return output_file
 
     def get_profiling_summary(self) -> Dict[str, Any]:
         """Get summary of profiling capabilities and results"""

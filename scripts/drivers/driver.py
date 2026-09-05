@@ -33,7 +33,11 @@ class ExecutionResult:
         return statistics.stdev(self.times) if len(self.times) >= 2 else 0.0
 
     def brief_str(self) -> str:
-        result = f'warm_up={self.warm_up:.2f}ms, avg={self.avg():.2f}ms, median={self.median():.2f}ms, stdev={self.stdev():.2f}'
+        result = (
+            f'runs={len(self.times)}, warm_up={self.warm_up:.2f}ms, '
+            f'avg={self.avg():.2f}ms, median={self.median():.2f}ms, '
+            f'stdev={self.stdev():.2f}'
+        )
         if self.profiling and self.profiling.has_cpu_data():
             result += ', profile=cpu'
         if self.profiling and self.profiling.has_gpu_data():
@@ -222,6 +226,8 @@ class Driver:
             dataset, algo, profiling_result.raw_output, iterations)
         profiling_result.add_metric('benchmark.time', result.times, 'ms')
         profiling_result.add_metric('benchmark.warm_up', [result.warm_up], 'ms')
+        profiling_result.metadata['completed_runs'] = len(result.times)
+        self.profiler_manager.write_profile_summary(profiling_result)
         result.profiling = profiling_result
         return result
 
@@ -240,4 +246,4 @@ class Driver:
                                algo: AlgorithmName,
                                raw_output: Optional[str],
                                iterations: int) -> ExecutionResult:
-        return ExecutionResult(warm_up=0.0, times=[0.0])
+        return ExecutionResult(warm_up=0.0, times=[])

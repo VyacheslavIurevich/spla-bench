@@ -90,6 +90,9 @@ def main():
 
     args = parser.parse_args()
 
+    summary = BenchmarkSummary()
+    run_output_dir = summary.prepare_output_dir(Path(args.output))
+
     profiler_manager = None
     if args.profile or args.cpu_profile or args.gpu_profile or args.flamegraph:
         from profiling.profiler_manager import create_profiler_manager
@@ -98,7 +101,7 @@ def main():
             cpu=args.cpu_profile or args.profile or args.flamegraph,
             gpu=args.gpu_profile or args.profile,
             flamegraph=args.flamegraph,
-            output_dir=Path(args.output) / 'profiling')
+            output_dir=run_output_dir / 'profiling')
 
     drivers: List[Driver] = []
     if args.tool is None:
@@ -115,8 +118,6 @@ def main():
     def print_status(status: str, *args):
         util.print_status('benchmark', status, *args)
 
-    summary = BenchmarkSummary()
-
     try:
         backend_info = ', '.join(
             f'{driver.tool_name()}={tool_backend(driver.tool_name())}'
@@ -127,7 +128,8 @@ def main():
             print_status(f'dataset {dataset_name}', 'start preparation')
             dataset = Dataset(dataset_name)
             print_status(f'dataset {dataset_name}', 'finish preparation',
-                         dataset.brief_info())
+                         dataset.brief_info(),
+                         f'runs_per_benchmark={dataset.get_category().iterations()}')
 
             for algo in algorithms:
                 status_algo_dataset = f'algo: {algo}, dataset: {dataset.name}'
@@ -149,12 +151,20 @@ def main():
                     status = f'algo: {algo}, dataset: {dataset.name}, tool: {str(driver.tool_name())}'
                     print_status(status, 'start benchmarking')
                     result = driver.run(dataset, algo)
-                    print_status(status, 'finish benchmarking')
+                    print_status(
+                        status,
+                        'finish benchmarking',
+                        f'actual_runs={len(result.times)}',
+                        f'configured_runs={dataset.get_category().iterations()}')
                     summary.add_measurement(
                         driver.tool_name(), dataset, algo, result)
                 print_status(status_algo_dataset, 'finish benchmarking')
     finally:
-        summary.dump(args.format, Path(args.output), args.printer)
+        summary.dump(
+            args.format,
+            Path(args.output),
+            args.printer,
+            run_output_dir=run_output_dir)
         if profiler_manager:
             profiler_manager.cleanup()
 

@@ -1,4 +1,6 @@
 import csv
+import html
+import json
 import os
 
 from typing import Dict, List, Tuple, Callable
@@ -11,6 +13,7 @@ from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.util import print_status
 from drivers.driver import ExecutionResult
+from profiling.profiler_base import NumericMetric
 
 
 """
@@ -96,16 +99,25 @@ class BenchmarkSummary:
                     items.append((algo, dataset_name, tool, result))
         return items
 
-    def dump(self, format: OutputFormat, output_dir: Path, results_printer: Callable):
-        output_dir.mkdir(exist_ok=True)
+    @staticmethod
+    def prepare_output_dir(output_dir: Path) -> Path:
+        output_dir.mkdir(parents=True, exist_ok=True)
         output = output_dir / datetime.ctime(datetime.now())
         output.mkdir(exist_ok=False)
         recent_link = output_dir / 'recent'
-        if recent_link.exists():
-            os.remove(recent_link)
+        if recent_link.exists() or recent_link.is_symlink():
+            recent_link.unlink()
         os.symlink(output, recent_link, target_is_directory=True)
 
         print_status('summary', 'dump', f'symlink: {recent_link}, original: {output}')
+        return output
+
+    def dump(self,
+             format: OutputFormat,
+             output_dir: Path,
+             results_printer: Callable,
+             run_output_dir: Path = None):
+        output = run_output_dir or self.prepare_output_dir(output_dir)
 
         if format == OutputFormat.raw:
             def process_result(t):
@@ -142,3 +154,113 @@ class BenchmarkSummary:
 
         else:
             raise Exception(f'Format {format.name} is not supported')
+
+        self._dump_json(output)
+        self._dump_timing_charts(output)
+
+    def _dump_json(self, output: Path) -> None:
+        results = []
+        for algo, dataset, tool, result in self.measurements_list():
+            timing = NumericMetric([float(value) for value in result.times], 'ms')
+            results.append({
+                'algorithm': str(algo),
+                'dataset': dataset,
+                'tool': str(tool),
+                'runs': len(result.times),
+                'warm_up_ms': result.warm_up,
+                'execution_time': timing.to_dict(),
+                'profiling': result.profiling.to_dict() if result.profiling else None,
+            })
+
+        output_file = output / 'benchmark_summary.json'
+        with output_file.open('w') as out_file:
+            json.dump({'results': results}, out_file, indent=2)
+        print_status('summary', 'json', output_file)
+
+    def _dump_timing_charts(self, output: Path) -> None:
+        charts_dir = output / 'charts'
+        charts_dir.mkdir(exist_ok=True)
+        chart_files = []
+
+        for algo, algo_results in self.results_per_algorithm():
+            rows = []
+            for dataset, tool_results in algo_results.items():
+                for tool, result in tool_results.items():
+                    metric = NumericMetric(
+                        [float(value) for value in result.times], 'ms')
+                    rows.append((f'{dataset} / {tool}', metric))
+
+            for statistic in ('mean', 'median'):
+                chart_file = charts_dir / f'{algo}_{statistic}.svg'
+                self._write_svg_chart(
+                    chart_file, f'{algo}: execution time ({statistic})',
+                    rows, statistic)
+                chart_files.append(chart_file)
+
+        index_file = charts_dir / 'index.html'
+        with index_file.open('w') as out_file:
+            out_file.write('<!doctype html><meta charset="utf-8">')
+            out_file.write('<title>Benchmark timing charts</title>')
+            out_file.write('<h1>Benchmark timing charts</h1>')
+            for chart_file in chart_files:
+                out_file.write(
+                    f'<h2>{html.escape(chart_file.stem)}</h2>'
+                    f'<img src="{html.escape(chart_file.name)}" '
+                    f'style="max-width:100%;height:auto">')
+        print_status('summary', 'charts', index_file)
+
+    @staticmethod
+    def _write_svg_chart(output_file: Path,
+                         title: str,
+                         rows: List[Tuple[str, NumericMetric]],
+                         statistic: str) -> None:
+        width = max(800, 140 + len(rows) * 90)
+        height = 560
+        left, top, bottom = 80, 60, 180
+        plot_width = width - left - 30
+        plot_height = height - top - bottom
+        values = [
+            metric.mean() if statistic == 'mean' else metric.median()
+            for _, metric in rows
+        ]
+        max_value = max(values, default=0.0) or 1.0
+        slot_width = plot_width / max(len(rows), 1)
+        bar_width = max(12, slot_width * 0.65)
+
+        svg = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+            '<style>text{font-family:sans-serif;fill:#222}'
+            '.axis{stroke:#555;stroke-width:1}.bar{fill:#4c78a8}'
+            '.variance{font-size:10px}.label{font-size:11px}</style>',
+            f'<text x="{width / 2}" y="30" text-anchor="middle" '
+            f'font-size="18">{html.escape(title)}</text>',
+            f'<line class="axis" x1="{left}" y1="{top}" '
+            f'x2="{left}" y2="{top + plot_height}"/>',
+            f'<line class="axis" x1="{left}" y1="{top + plot_height}" '
+            f'x2="{left + plot_width}" y2="{top + plot_height}"/>',
+            f'<text x="18" y="{top + plot_height / 2}" '
+            f'transform="rotate(-90 18 {top + plot_height / 2})" '
+            f'text-anchor="middle">time, ms</text>',
+        ]
+
+        for index, ((label, metric), value) in enumerate(zip(rows, values)):
+            x = left + index * slot_width + (slot_width - bar_width) / 2
+            bar_height = value / max_value * plot_height
+            y = top + plot_height - bar_height
+            svg.extend([
+                f'<rect class="bar" x="{x:.2f}" y="{y:.2f}" '
+                f'width="{bar_width:.2f}" height="{bar_height:.2f}"/>',
+                f'<text x="{x + bar_width / 2:.2f}" y="{max(top + 12, y - 16):.2f}" '
+                f'text-anchor="middle" font-size="11">{value:.3g} ms</text>',
+                f'<text class="variance" x="{x + bar_width / 2:.2f}" '
+                f'y="{max(top + 24, y - 4):.2f}" text-anchor="middle">'
+                f'variance={metric.variance():.3g}</text>',
+                f'<text class="label" x="{x + bar_width / 2:.2f}" '
+                f'y="{top + plot_height + 16}" text-anchor="end" '
+                f'transform="rotate(-55 {x + bar_width / 2:.2f} '
+                f'{top + plot_height + 16})">{html.escape(label)}</text>',
+            ])
+
+        svg.append('</svg>')
+        output_file.write_text('\n'.join(svg))

@@ -192,7 +192,7 @@ CONDA_GRB_REPO = Namespace(
 )
 
 """
-Suitesparse.GraphBLAST installation information
+SuiteSparse.GraphBLAS installation information
 
 [MUTABLE]
 

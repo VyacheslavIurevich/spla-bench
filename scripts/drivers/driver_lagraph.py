@@ -117,7 +117,7 @@ class DriverLaGraph(Driver):
                                raw_output: str,
                                iterations: int) -> ExecutionResult:
         if raw_output is None:
-            return ExecutionResult(warm_up=0.0, times=[0.0])
+            return ExecutionResult(warm_up=0.0, times=[])
 
         output = raw_output.encode('ASCII', errors='ignore')
         if algo == AlgorithmName.bfs:
@@ -135,7 +135,7 @@ class DriverLaGraph(Driver):
             return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
         if algo == AlgorithmName.pr:
             return DriverLaGraph._parse_output(output, "Avg: PR", 4)
-        return ExecutionResult(warm_up=0.0, times=[0.0])
+        return ExecutionResult(warm_up=0.0, times=[])
 
     @staticmethod
     def _parse_output(output: bytes,

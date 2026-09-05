@@ -214,10 +214,12 @@ class Dataset:
         def calculate_type():
             matrix_data = matrix.load(self.path)
             return str(dataset_type_from_type(matrix.value_type(matrix_data)))
-        return dataset_type_from_repr(DatasetPropertiesCache.get_or_eval(
-            self.name,
-            'element_type',
-            calculate_type))
+
+        cached_type = DatasetPropertiesCache.get(self.name, 'element_type')
+        if cached_type is None or cached_type == 'unknown':
+            cached_type = calculate_type()
+            DatasetPropertiesCache.set(self.name, 'element_type', cached_type)
+        return dataset_type_from_repr(cached_type)
 
     def get_properties(self) -> DatasetProperties:
         return DatasetProperties(
@@ -245,7 +247,10 @@ class Dataset:
         else:
             graph_kind = 'directed' if cached_directed else 'undirected'
 
-        element_type = cached_element_type if cached_element_type is not None else 'unknown'
+        if cached_element_type is None or cached_element_type == 'unknown':
+            element_type = str(self.get_element_type())
+        else:
+            element_type = cached_element_type
 
         return (
             f'vertices={self.get_vertices()}, '

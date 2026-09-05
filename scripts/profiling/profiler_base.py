@@ -9,6 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
+try:
+    from scipy.stats import shapiro
+except ImportError:
+    shapiro = None
+
 
 @dataclass
 class NumericMetric:
@@ -26,11 +31,30 @@ class NumericMetric:
     def stdev(self) -> float:
         return statistics.stdev(self.samples) if len(self.samples) >= 2 else 0.0
 
+    def variance(self) -> float:
+        return statistics.variance(self.samples) if len(self.samples) >= 2 else 0.0
+
     def min(self) -> float:
         return min(self.samples) if self.samples else 0.0
 
     def max(self) -> float:
         return max(self.samples) if self.samples else 0.0
+
+    def is_normal_distribution(self, alpha: float = 0.05) -> bool:
+        """Return whether a Shapiro-Wilk test accepts the normality hypothesis."""
+        if shapiro is None or len(self.samples) < 3 or len(set(self.samples)) < 2:
+            return False
+
+        # scipy warns that p-values are inaccurate above 5000 observations.
+        samples = self.samples
+        if len(samples) > 5000:
+            step = len(samples) / 5000
+            samples = [samples[int(index * step)] for index in range(5000)]
+
+        try:
+            return bool(shapiro(samples).pvalue >= alpha)
+        except (ValueError, FloatingPointError):
+            return False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -39,8 +63,12 @@ class NumericMetric:
             "mean": self.mean(),
             "median": self.median(),
             "stdev": self.stdev(),
+            "variance": self.variance(),
             "min": self.min(),
             "max": self.max(),
+            "is_normal_distribution": self.is_normal_distribution(),
+            "normality_test": "shapiro-wilk",
+            "normality_alpha": 0.05,
         }
 
 

@@ -47,7 +47,7 @@ def suitesparse_build() -> Tuple[Path, Path]:
     gb_cloned = check_paths_exist([gb_include])
 
     if not gb_cloned:
-        print(f'Cloning GraphBLAS from {sp_info.url} to the {sp_info.dest}')
+        print(f'Cloning SuiteSparse.GraphBLAS from {sp_info.url} to {sp_info.dest}')
         check_call(
             [
                 'git', 'clone', '--recursive',
