@@ -40,6 +40,8 @@ class ExecutionResult:
             result += ', profile=gpu'
         if self.profiling and self.profiling.has_flamegraph():
             result += ', flamegraph'
+        if self.profiling and self.profiling.numeric_metrics:
+            result += f', metrics: {self.profiling.metrics_brief_str()}'
         return result
 
     def __str__(self) -> str:
@@ -188,10 +190,7 @@ class Driver:
         result: ExecutionResult = None
 
         if self.profiler_manager:
-            profiling_iterations = config.DEFAULT_PROFILING_ITERATIONS.get(
-                dataset_category, iterations)
-            result = self._run_with_profiling(
-                dataset, algo, source, profiling_iterations)
+            result = self._run_with_profiling(dataset, algo, source, iterations)
         else:
             if algo == AlgorithmName.bfs:
                 result = self.run_bfs(dataset, source, iterations)
@@ -221,6 +220,8 @@ class Driver:
 
         result = self._parse_profiled_output(
             dataset, algo, profiling_result.raw_output, iterations)
+        profiling_result.add_metric('benchmark.time', result.times, 'ms')
+        profiling_result.add_metric('benchmark.warm_up', [result.warm_up], 'ms')
         result.profiling = profiling_result
         return result
 

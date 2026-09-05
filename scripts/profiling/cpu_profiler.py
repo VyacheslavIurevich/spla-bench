@@ -2,6 +2,7 @@
 CPU profiler implementation using perf
 """
 
+import os
 import subprocess
 import re
 import shutil
@@ -102,13 +103,25 @@ class CPUProfiler(Profiler):
 
         try:
             output_file = self._output_base("counters", metadata)
+            env = os.environ.copy()
+            env["LC_ALL"] = "C"
 
             with open(output_file.with_suffix(".txt"), "w") as f:
                 process = subprocess.run(
-                    [self.perf_path, "stat", "-e", ",".join(counters), "-r", str(runs)]
+                    [
+                        self.perf_path,
+                        "stat",
+                        "-x",
+                        ",",
+                        "-e",
+                        ",".join(counters),
+                        "-r",
+                        "1",
+                    ]
                     + command,
                     capture_output=True,
                     text=True,
+                    env=env,
                 )
                 f.write(process.stderr)
 
@@ -117,6 +130,14 @@ class CPUProfiler(Profiler):
             result = ProfileResult(
                 cpu_hardware_counters=counters_data, metadata=metadata
             )
+            result.add_metric("cpu.benchmark_iterations", [runs], "runs")
+            for counter, value in counters_data.items():
+                if isinstance(value, (int, float)):
+                    result.add_metric(f"cpu.{counter}.process", [value], "events")
+                    if runs > 0:
+                        result.add_metric(
+                            f"cpu.{counter}.per_iteration", [value / runs], "events"
+                        )
             return result
 
         except subprocess.CalledProcessError as e:
@@ -136,6 +157,7 @@ class CPUProfiler(Profiler):
             raw_output=callgraph_result.raw_output,
             metadata=metadata,
         )
+        result.merge_metrics_from(counters_result)
         return result
 
     def parse_results(self, raw_output: bytes) -> Dict[str, Any]:
@@ -150,27 +172,56 @@ class CPUProfiler(Profiler):
         """Parse perf stat output"""
         counters = {}
 
-        patterns = {
-            "cycles": r"(\d+(?:,\d+)*)\s+cycles",
-            "instructions": r"(\d+(?:,\d+)*)\s+instructions",
-            "cache_references": r"(\d+(?:,\d+)*)\s+cache-references",
-            "cache_misses": r"(\d+(?:,\d+)*)\s+cache-misses",
-            "llc_loads": r"(\d+(?:,\d+)*)\s+LLC-loads",
-            "llc_load_misses": r"(\d+(?:,\d+)*)\s+LLC-load-misses",
-            "branch_misses": r"(\d+(?:,\d+)*)\s+branch-misses",
-            "branch_instructions": r"(\d+(?:,\d+)*)\s+branch-instructions",
+        event_names = {
+            "cycles": "cycles",
+            "instructions": "instructions",
+            "cache-references": "cache_references",
+            "cache-misses": "cache_misses",
+            "LLC-loads": "llc_loads",
+            "LLC-load-misses": "llc_load_misses",
+            "branch-misses": "branch_misses",
+            "branch-instructions": "branch_instructions",
         }
 
-        for key, pattern in patterns.items():
+        for line in output.splitlines():
+            parts = line.split(",")
+            if len(parts) >= 3:
+                value = self._parse_number(parts[0])
+                event = parts[2].strip()
+                if value is not None and event in event_names:
+                    counters[event_names[event]] = value
+
+        if counters:
+            return counters
+
+        for event, key in event_names.items():
+            pattern = rf"([\d\s,\.\u202f\xa0]+)\s+{re.escape(event)}"
             match = re.search(pattern, output)
             if match:
-                value = match.group(1).replace(",", "")
-                try:
-                    counters[key] = int(value)
-                except ValueError:
+                value = self._parse_number(match.group(1))
+                if value is not None:
                     counters[key] = value
 
         return counters
+
+    def _parse_number(self, value: str) -> Optional[float]:
+        normalized = (
+            value.strip()
+            .replace("\u202f", "")
+            .replace("\xa0", "")
+            .replace(" ", "")
+        )
+        if not normalized or normalized.startswith("<not"):
+            return None
+        if normalized.count(",") == 1 and "." not in normalized:
+            normalized = normalized.replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+        try:
+            parsed = float(normalized)
+        except ValueError:
+            return None
+        return int(parsed) if parsed.is_integer() else parsed
 
     def generate_report(self, perf_file: Path) -> str:
         """Generate human-readable report from perf data"""

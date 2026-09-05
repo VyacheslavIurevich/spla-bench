@@ -2,6 +2,7 @@
 Profiling manager for coordinating different profiling tools
 """
 
+import json
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
@@ -12,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # Explicitly import config from file to avoid package conflicts
 if TYPE_CHECKING:
-    from config import ProfilingConfig, PROFILING_OUTPUT, DEFAULT_PROFILING_ITERATIONS
+    from config import ProfilingConfig, PROFILING_OUTPUT
 else:
     config_spec = importlib.util.spec_from_file_location(
         "spla_bench_config", str(Path(__file__).parent.parent / "config.py")
@@ -21,7 +22,6 @@ else:
     config_spec.loader.exec_module(config)
     ProfilingConfig = config.ProfilingConfig
     PROFILING_OUTPUT = config.PROFILING_OUTPUT
-    DEFAULT_PROFILING_ITERATIONS = config.DEFAULT_PROFILING_ITERATIONS
 
 # Add current directory for profiling imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -47,6 +47,7 @@ class ProfilerManager:
         self.cpu_profiler: Optional[CPUProfiler] = None
         self.gpu_profiler: Optional[GPUProfiler] = None
         self.flamegraph_generator: Optional[FlamegraphGenerator] = None
+        self.flamegraph_folded_files: List[Path] = []
 
         self._setup_profilers()
 
@@ -105,6 +106,7 @@ class ProfilerManager:
             profiling_result.cpu_callgraph = cpu_result.cpu_callgraph
             profiling_result.cpu_hardware_counters = cpu_result.cpu_hardware_counters
             profiling_result.raw_output = cpu_result.raw_output
+            profiling_result.merge_metrics_from(cpu_result)
 
             if (
                 self.config.flamegraph
@@ -124,6 +126,9 @@ class ProfilerManager:
                 ):
                     profiling_result.flamegraph_html = flamegraph_file
                     profiling_result.flamegraph_svg = flamegraph_file.with_suffix(".svg")
+                    folded_file = profiling_result.cpu_callgraph.with_suffix(".folded")
+                    if folded_file.exists():
+                        self.flamegraph_folded_files.append(folded_file)
 
         if (
             self.config.gpu_profiling
@@ -135,17 +140,47 @@ class ProfilerManager:
             profiling_result.gpu_timeline = gpu_result.gpu_timeline
             profiling_result.gpu_memory = gpu_result.gpu_memory
             profiling_result.raw_output = gpu_result.raw_output or profiling_result.raw_output
+            profiling_result.merge_metrics_from(gpu_result)
+            profiling_result.metadata.update(gpu_result.metadata)
 
+        self._write_profile_summary(profiling_result)
         return profiling_result
 
     def cleanup(self):
         """Cleanup profiling resources"""
+        if (
+            self.flamegraph_generator
+            and len(self.flamegraph_folded_files) > 1
+        ):
+            folded_file = self.output_dir / "flamegraphs" / "aggregate.folded"
+            html_file = self.output_dir / "flamegraphs" / "aggregate.html"
+            if self.flamegraph_generator.aggregate_folded_files(
+                self.flamegraph_folded_files, folded_file
+            ):
+                self.flamegraph_generator.generate_interactive_flamegraph_from_folded(
+                    folded_file, html_file
+                )
+
         if self.cpu_profiler:
             self.cpu_profiler.cleanup()
         if self.gpu_profiler:
             self.gpu_profiler.cleanup()
         if self.flamegraph_generator:
             self.flamegraph_generator.cleanup()
+
+    def _write_profile_summary(self, profiling_result: ProfileResult) -> None:
+        metadata = profiling_result.metadata
+        tool = metadata.get("tool", "unknown")
+        algo = metadata.get("algo", "unknown")
+        dataset = metadata.get("dataset", "unknown")
+        output_file = (
+            self.output_dir
+            / "summary"
+            / f"summary_{tool}_{algo}_{dataset}.json"
+        )
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, "w") as f:
+            json.dump(profiling_result.to_dict(), f, indent=2)
 
     def get_profiling_summary(self) -> Dict[str, Any]:
         """Get summary of profiling capabilities and results"""

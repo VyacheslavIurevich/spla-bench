@@ -106,6 +106,17 @@ class GPUProfiler(Profiler):
             if platform_name:
                 self.intel_gpu_info["platform_name"] = platform_name
 
+    def _parse_timing_samples(self, stdout: str, prefix: str) -> List[float]:
+        for line in stdout.splitlines():
+            if line.startswith(prefix):
+                values = line.replace(prefix, "").strip()
+                return [
+                    float(value.strip())
+                    for value in values.split(",")
+                    if value.strip()
+                ]
+        return []
+
     def profile(self, command: List[str], metadata: Dict[str, Any]) -> ProfileResult:
         """Run GPU profiling with basic monitoring for Intel GPU"""
         print(
@@ -163,6 +174,40 @@ class GPUProfiler(Profiler):
 
             # Save comprehensive GPU analysis
             analysis_file_path = str(analysis_file).replace('"', "")
+            result = ProfileResult(
+                metadata=metadata,
+                raw_output=command_result.stdout,
+                gpu_timeline=Path(analysis_file_path),
+            )
+            result.add_metric(
+                "gpu.spla_gpu_time",
+                self._parse_timing_samples(command_result.stdout, "gpu(ms):"),
+                "ms",
+            )
+            result.add_metric(
+                "gpu.spla_cpu_time",
+                self._parse_timing_samples(command_result.stdout, "cpu(ms):"),
+                "ms",
+            )
+            result.add_metric("gpu.process.elapsed", [timing_info.get("elapsed", 0)], "s")
+            result.add_metric("gpu.process.user", [timing_info.get("user", 0)], "s")
+            result.add_metric("gpu.process.system", [timing_info.get("system", 0)], "s")
+            result.add_metric("gpu.system.cpu_before", [before_stats.get("cpu_usage", 0)], "%")
+            result.add_metric("gpu.system.cpu_after", [after_stats.get("cpu_usage", 0)], "%")
+            result.add_metric(
+                "gpu.system.memory_before", [before_stats.get("memory_usage", 0)], "%"
+            )
+            result.add_metric(
+                "gpu.system.memory_after", [after_stats.get("memory_usage", 0)], "%"
+            )
+            result.add_metric(
+                "gpu.system.memory_delta",
+                [
+                    after_stats.get("memory_usage", 0)
+                    - before_stats.get("memory_usage", 0)
+                ],
+                "%",
+            )
             with open(analysis_file_path, "w", encoding="utf-8") as f:
                 f.write("=== Intel GPU Profiling Analysis ===\n\n")
                 f.write(f"Tool: {metadata.get('tool')}\n")
@@ -224,6 +269,16 @@ class GPUProfiler(Profiler):
                 )
                 f.write(f"Warnings: {gpu_patterns.get('gpu_warnings', 0)}\n")
 
+                if result.numeric_metrics:
+                    f.write(f"\n=== Aggregated Metrics ===\n")
+                    for name, metric in sorted(result.numeric_metrics.items()):
+                        f.write(
+                            f"{name}: mean={metric.mean():.2f}{metric.unit}, "
+                            f"median={metric.median():.2f}{metric.unit}, "
+                            f"stdev={metric.stdev():.2f}{metric.unit}, "
+                            f"samples={metric.samples}\n"
+                        )
+
                 if gpu_patterns.get("performance_issues"):
                     f.write(f"\n=== Performance Issues Detected ===\n")
                     for issue in gpu_patterns["performance_issues"]:
@@ -233,12 +288,6 @@ class GPUProfiler(Profiler):
                 f.write(f"Command: {' '.join(command)}\n\n")
                 f.write(f"STDOUT:\n{command_result.stdout}\n")
                 f.write(f"\nSTDERR:\n{command_result.stderr}\n")
-
-            result = ProfileResult(
-                metadata=metadata,
-                raw_output=command_result.stdout,
-                gpu_timeline=Path(analysis_file_path),
-            )
 
             # Add GPU analysis to metadata
             result.metadata.update(gpu_patterns)
