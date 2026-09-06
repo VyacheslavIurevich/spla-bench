@@ -41,6 +41,8 @@ class CPUProfiler(Profiler):
             metadata.get("algo"),
             metadata.get("dataset"),
         ]
+        if metadata.get("run_index") is not None:
+            parts.append(f"run{metadata['run_index']}")
         filename = "_".join(str(part).replace("/", "_") for part in parts if part)
         return self.get_output_file(filename)
 
@@ -73,7 +75,11 @@ class CPUProfiler(Profiler):
 
             result = ProfileResult(
                 cpu_callgraph=perf_file,
-                raw_output=process.stdout,
+                raw_output=(
+                    (process.stdout or "")
+                    + "\n"
+                    + (process.stderr or "")
+                ),
                 metadata=metadata,
             )
             return result

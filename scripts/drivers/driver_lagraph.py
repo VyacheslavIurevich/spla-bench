@@ -1,4 +1,5 @@
 import os
+import re
 import time
 
 from typing import List
@@ -127,7 +128,11 @@ class DriverLaGraph(Driver):
 
             avg_lines = lines_startswith(raw_output.split("\n"), "Avg: BFS")
             if avg_lines:
-                result.times = [float(tokenize(avg_lines[0])[7]) * 1000]
+                match = re.search(
+                    r"Avg:\s+BFS.*?([0-9]+(?:\.[0-9]+)?)\s+sec",
+                    avg_lines[0])
+                if match:
+                    result.times = [float(match.group(1)) * 1000]
             return result
         if algo == AlgorithmName.sssp:
             return DriverLaGraph._parse_output(output, "sssp", 8)

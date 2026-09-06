@@ -47,7 +47,6 @@ class ProfilerManager:
         self.cpu_profiler: Optional[CPUProfiler] = None
         self.gpu_profiler: Optional[GPUProfiler] = None
         self.flamegraph_generator: Optional[FlamegraphGenerator] = None
-        self.flamegraph_folded_files: List[Path] = []
 
         self._setup_profilers()
 
@@ -126,9 +125,6 @@ class ProfilerManager:
                 ):
                     profiling_result.flamegraph_html = flamegraph_file
                     profiling_result.flamegraph_svg = flamegraph_file.with_suffix(".svg")
-                    folded_file = profiling_result.cpu_callgraph.with_suffix(".folded")
-                    if folded_file.exists():
-                        self.flamegraph_folded_files.append(folded_file)
 
         if (
             self.config.gpu_profiling
@@ -145,21 +141,96 @@ class ProfilerManager:
 
         return profiling_result
 
+    def profiles_individual_flamegraph_runs(self) -> bool:
+        """Whether each configured run must get its own callgraph candidate."""
+        return bool(
+            self.config.flamegraph
+            and self.cpu_profiler
+            and self.flamegraph_generator
+        )
+
+    def run_flamegraph_candidate(
+        self,
+        command: List[str],
+        tool: Any,
+        dataset: Any,
+        algo: Any,
+        run_index: int,
+    ) -> ProfileResult:
+        """Profile one benchmark run without creating an intermediate flamegraph."""
+        metadata = {
+            "tool": str(tool),
+            "algo": str(algo),
+            "dataset": dataset.name,
+            "runs": 1,
+            "run_index": run_index,
+        }
+        print(
+            f"Profiling flamegraph candidate {run_index}: "
+            f"{tool} {algo} {dataset.name}"
+        )
+        return self.cpu_profiler.profile_callgraph(command, metadata)
+
+    def finalize_flamegraph_candidates(
+        self,
+        candidates: List[ProfileResult],
+        selected_index: Optional[int],
+        tool: Any,
+        dataset: Any,
+        algo: Any,
+        configured_runs: int,
+    ) -> ProfileResult:
+        """Render only the median-nearest candidate, if timing was parsed."""
+        selected = candidates[selected_index if selected_index is not None else 0]
+
+        selected.metadata = {
+            "tool": str(tool),
+            "algo": str(algo),
+            "dataset": dataset.name,
+            "runs": configured_runs,
+            "profiled_processes": len(candidates),
+            "hardware_counters": "not_collected_in_median_flamegraph_mode",
+            "representative_run_index": (
+                selected_index + 1 if selected_index is not None else None
+            ),
+            "flamegraph_selection": (
+                "execution_time_closest_to_median"
+                if selected_index is not None
+                else "failed_no_execution_times"
+            ),
+        }
+
+        flamegraph_file = (
+            self.output_dir
+            / "flamegraphs"
+            / f"{tool}_{algo}_{dataset.name}.html"
+        )
+        flamegraph_file.parent.mkdir(parents=True, exist_ok=True)
+        if (
+            selected_index is not None
+            and selected.cpu_callgraph
+            and self.flamegraph_generator.generate_interactive_flamegraph(
+                selected.cpu_callgraph, flamegraph_file
+            )
+        ):
+            selected.flamegraph_html = flamegraph_file
+            selected.flamegraph_svg = flamegraph_file.with_suffix(".svg")
+
+        for index, candidate in enumerate(candidates):
+            if (
+                index == selected_index
+                or not candidate.cpu_callgraph
+            ):
+                continue
+            candidate.cpu_callgraph.unlink(missing_ok=True)
+
+        if selected_index is None:
+            selected.cpu_callgraph = None
+
+        return selected
+
     def cleanup(self):
         """Cleanup profiling resources"""
-        if (
-            self.flamegraph_generator
-            and len(self.flamegraph_folded_files) > 1
-        ):
-            folded_file = self.output_dir / "flamegraphs" / "aggregate.folded"
-            html_file = self.output_dir / "flamegraphs" / "aggregate.html"
-            if self.flamegraph_generator.aggregate_folded_files(
-                self.flamegraph_folded_files, folded_file
-            ):
-                self.flamegraph_generator.generate_interactive_flamegraph_from_folded(
-                    folded_file, html_file
-                )
-
         if self.cpu_profiler:
             self.cpu_profiler.cleanup()
         if self.gpu_profiler:

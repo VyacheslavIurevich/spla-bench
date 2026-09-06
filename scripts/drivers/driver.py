@@ -215,6 +215,10 @@ class Driver:
                             algo: AlgorithmName,
                             source: int,
                             iterations: int) -> ExecutionResult:
+        if self.profiler_manager.profiles_individual_flamegraph_runs():
+            return self._run_with_median_flamegraph(
+                dataset, algo, source, iterations)
+
         command = self._build_command(dataset, algo, source, iterations)
         try:
             profiling_result = self.profiler_manager.run_profiling(
@@ -228,6 +232,83 @@ class Driver:
         profiling_result.add_metric('benchmark.warm_up', [result.warm_up], 'ms')
         profiling_result.metadata['completed_runs'] = len(result.times)
         self.profiler_manager.write_profile_summary(profiling_result)
+        result.profiling = profiling_result
+        return result
+
+    def _run_with_median_flamegraph(self,
+                                    dataset: Dataset,
+                                    algo: AlgorithmName,
+                                    source: int,
+                                    iterations: int) -> ExecutionResult:
+        candidates = []
+        candidate_results = []
+        valid_timings = []
+
+        for run_index in range(1, iterations + 1):
+            command = self._build_command(dataset, algo, source, 1)
+            try:
+                candidate = self.profiler_manager.run_flamegraph_candidate(
+                    command,
+                    self.tool_name(),
+                    dataset,
+                    algo,
+                    run_index)
+                candidate_result = self._parse_profiled_output(
+                    dataset, algo, candidate.raw_output, 1)
+            finally:
+                self._cleanup_profile_command()
+
+            candidates.append(candidate)
+            candidate_results.append(candidate_result)
+            if candidate_result.times:
+                process_time = candidate_result.avg()
+                valid_timings.append((len(candidates) - 1, process_time))
+                self.print_status(
+                    'profile run',
+                    f'dataset={dataset.name}',
+                    f'run={run_index}/{iterations}',
+                    f'execution_time={process_time:.2f}ms')
+            else:
+                self.print_status(
+                    'profile run',
+                    f'dataset={dataset.name}',
+                    f'run={run_index}/{iterations}',
+                    'execution_time=unavailable')
+
+        if valid_timings:
+            median_time = statistics.median(
+                timing for _, timing in valid_timings)
+            selected_index, selected_time = min(
+                valid_timings,
+                key=lambda item: abs(item[1] - median_time))
+            times = [timing for _, timing in valid_timings]
+            warm_up = candidate_results[selected_index].warm_up
+        else:
+            median_time = None
+            selected_time = None
+            selected_index = None
+            times = []
+            warm_up = 0.0
+
+        profiling_result = self.profiler_manager.finalize_flamegraph_candidates(
+            candidates,
+            selected_index,
+            self.tool_name(),
+            dataset,
+            algo,
+            iterations)
+        profiling_result.metadata.update({
+            'completed_runs': len(times),
+            'representative_execution_time_ms': selected_time,
+            'median_execution_time_ms': median_time,
+        })
+        profiling_result.add_metric('benchmark.time', times, 'ms')
+        profiling_result.add_metric('benchmark.warm_up', [warm_up], 'ms')
+        profiling_result.add_metric(
+            'cpu.benchmark_iterations', [iterations], 'runs')
+        self.profiler_manager.write_profile_summary(profiling_result)
+
+        result = ExecutionResult(warm_up=warm_up, times=times)
         result.profiling = profiling_result
         return result
 
