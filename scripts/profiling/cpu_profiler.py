@@ -109,10 +109,11 @@ class CPUProfiler(Profiler):
 
         try:
             output_file = self._output_base("counters", metadata)
+            counters_file = output_file.with_suffix(".txt")
             env = os.environ.copy()
             env["LC_ALL"] = "C"
 
-            with open(output_file.with_suffix(".txt"), "w") as f:
+            with open(counters_file, "w") as f:
                 process = subprocess.run(
                     [
                         self.perf_path,
@@ -134,7 +135,10 @@ class CPUProfiler(Profiler):
             counters_data = self.parse_perf_stat(process.stderr)
 
             result = ProfileResult(
-                cpu_hardware_counters=counters_data, metadata=metadata
+                cpu_hardware_counters=counters_data,
+                cpu_hardware_counters_file=counters_file,
+                raw_output=process.stdout,
+                metadata=metadata,
             )
             result.add_metric("cpu.benchmark_iterations", [runs], "runs")
             for counter, value in counters_data.items():
@@ -160,6 +164,9 @@ class CPUProfiler(Profiler):
         result = ProfileResult(
             cpu_callgraph=callgraph_result.cpu_callgraph,
             cpu_hardware_counters=counters_result.cpu_hardware_counters,
+            cpu_hardware_counters_file=(
+                counters_result.cpu_hardware_counters_file
+            ),
             raw_output=callgraph_result.raw_output,
             metadata=metadata,
         )

@@ -77,8 +77,11 @@ class ProfileResult:
     """Results from profiling execution"""
 
     cpu_callgraph: Optional[Path] = None
+    cpu_callgraph_folded: Optional[Path] = None
     cpu_hardware_counters: Optional[Dict[str, Any]] = None
+    cpu_hardware_counters_file: Optional[Path] = None
     gpu_timeline: Optional[Path] = None
+    gpu_timing: Optional[Path] = None
     gpu_memory: Optional[Path] = None
     flamegraph_svg: Optional[Path] = None
     flamegraph_html: Optional[Path] = None
@@ -118,7 +121,18 @@ class ProfileResult:
             "metadata": self.metadata,
             "files": {
                 "cpu_callgraph": str(self.cpu_callgraph) if self.cpu_callgraph else None,
+                "cpu_callgraph_folded": (
+                    str(self.cpu_callgraph_folded)
+                    if self.cpu_callgraph_folded
+                    else None
+                ),
+                "cpu_hardware_counters": (
+                    str(self.cpu_hardware_counters_file)
+                    if self.cpu_hardware_counters_file
+                    else None
+                ),
                 "gpu_timeline": str(self.gpu_timeline) if self.gpu_timeline else None,
+                "gpu_timing": str(self.gpu_timing) if self.gpu_timing else None,
                 "gpu_memory": str(self.gpu_memory) if self.gpu_memory else None,
                 "flamegraph_svg": str(self.flamegraph_svg) if self.flamegraph_svg else None,
                 "flamegraph_html": str(self.flamegraph_html) if self.flamegraph_html else None,

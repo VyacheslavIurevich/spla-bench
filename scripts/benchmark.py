@@ -101,6 +101,7 @@ def main():
             cpu=args.cpu_profile or args.profile or args.flamegraph,
             gpu=args.gpu_profile or args.profile,
             flamegraph=args.flamegraph,
+            hardware_counters=args.cpu_profile or args.profile,
             output_dir=run_output_dir / 'profiling')
 
     drivers: List[Driver] = []

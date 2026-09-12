@@ -92,52 +92,59 @@ class ProfilerManager:
         }
 
         profiling_result = ProfileResult(metadata=metadata)
-
-        # Disable GPU profiling for Gunrock and GraphBLAST
-        disable_gpu_profiling = str(tool) in ["gunrock", "graphblast"]
+        profiled_processes = 0
+        profile_passes = []
 
         if (
-            self.config.cpu_profiling
+            self.config.hardware_counters
             and self.cpu_profiler
         ):
-            print(f"Running CPU profiling for {tool} {algo}")
-            cpu_result = self.cpu_profiler.profile(command, metadata)
-            profiling_result.cpu_callgraph = cpu_result.cpu_callgraph
+            print(f"Running CPU hardware counters for {tool} {algo}")
+            cpu_result = self.cpu_profiler.profile_hardware_counters(
+                command, runs, metadata
+            )
             profiling_result.cpu_hardware_counters = cpu_result.cpu_hardware_counters
+            profiling_result.cpu_hardware_counters_file = (
+                cpu_result.cpu_hardware_counters_file
+            )
             profiling_result.raw_output = cpu_result.raw_output
             profiling_result.merge_metrics_from(cpu_result)
-
-            if (
-                self.config.flamegraph
-                and self.flamegraph_generator
-                and profiling_result.cpu_callgraph
-            ):
-                print(f"Generating flamegraph for {tool} {algo}")
-                flamegraph_file = (
-                    self.output_dir
-                    / "flamegraphs"
-                    / f"{tool}_{algo}_{dataset.name}.html"
-                )
-                flamegraph_file.parent.mkdir(parents=True, exist_ok=True)
-
-                if self.flamegraph_generator.generate_interactive_flamegraph(
-                    profiling_result.cpu_callgraph, flamegraph_file
-                ):
-                    profiling_result.flamegraph_html = flamegraph_file
-                    profiling_result.flamegraph_svg = flamegraph_file.with_suffix(".svg")
+            profiling_result.metadata["hardware_counters"] = (
+                "collected_in_separate_perf_stat_pass"
+                if cpu_result.cpu_hardware_counters
+                else "separate_perf_stat_pass_failed"
+            )
+            profiling_result.metadata["hardware_counter_profiled_processes"] = 1
+            profiled_processes += 1
+            profile_passes.append("cpu_hardware_counters")
 
         if (
             self.config.gpu_profiling
             and self.gpu_profiler
-            and not disable_gpu_profiling
+            and self.supports_gpu_profiling(tool)
         ):
             print(f"Running GPU profiling for {tool} {algo}")
             gpu_result = self.gpu_profiler.profile(command, metadata)
             profiling_result.gpu_timeline = gpu_result.gpu_timeline
+            profiling_result.gpu_timing = gpu_result.gpu_timing
             profiling_result.gpu_memory = gpu_result.gpu_memory
-            profiling_result.raw_output = gpu_result.raw_output or profiling_result.raw_output
+            profiling_result.raw_output = (
+                profiling_result.raw_output or gpu_result.raw_output
+            )
             profiling_result.merge_metrics_from(gpu_result)
             profiling_result.metadata.update(gpu_result.metadata)
+            profiling_result.metadata["gpu_profile"] = (
+                "collected"
+                if gpu_result.gpu_timeline or gpu_result.numeric_metrics
+                else "failed"
+            )
+            profiling_result.metadata["gpu_profiled_processes"] = 1
+            profiled_processes += 1
+            profile_passes.append("gpu")
+
+        profiling_result.metadata["profiled_processes"] = profiled_processes
+        profiling_result.metadata["profile_passes"] = profile_passes
+        profiling_result.metadata["profile_pass_count"] = len(profile_passes)
 
         return profiling_result
 
@@ -147,6 +154,22 @@ class ProfilerManager:
             self.config.flamegraph
             and self.cpu_profiler
             and self.flamegraph_generator
+        )
+
+    def collects_hardware_counters(self) -> bool:
+        """Whether a separate perf stat pass was explicitly requested."""
+        return bool(self.config.hardware_counters and self.cpu_profiler)
+
+    def supports_gpu_profiling(self, tool: Any) -> bool:
+        """Whether GPU profiling is implemented for this tool."""
+        return str(tool) not in ["gunrock", "graphblast"]
+
+    def collects_gpu_metrics(self, tool: Any) -> bool:
+        """Whether a separate GPU profiling pass was requested."""
+        return bool(
+            self.config.gpu_profiling
+            and self.gpu_profiler
+            and self.supports_gpu_profiling(tool)
         )
 
     def run_flamegraph_candidate(
@@ -171,6 +194,55 @@ class ProfilerManager:
         )
         return self.cpu_profiler.profile_callgraph(command, metadata)
 
+    def run_hardware_counters(
+        self,
+        command: List[str],
+        tool: Any,
+        dataset: Any,
+        algo: Any,
+        runs: int,
+    ) -> Optional[ProfileResult]:
+        """Run a separate perf stat pass when CPU metrics were requested."""
+        if (
+            not self.config.hardware_counters
+            or not self.cpu_profiler
+        ):
+            return None
+
+        metadata = {
+            "tool": str(tool),
+            "algo": str(algo),
+            "dataset": dataset.name,
+            "runs": runs,
+            "profile_pass": "hardware_counters",
+        }
+        print(f"Running separate hardware counters pass for {tool} {algo}")
+        return self.cpu_profiler.profile_hardware_counters(
+            command, runs, metadata
+        )
+
+    def run_gpu_profile(
+        self,
+        command: List[str],
+        tool: Any,
+        dataset: Any,
+        algo: Any,
+        runs: int,
+    ) -> Optional[ProfileResult]:
+        """Run the explicitly requested GPU profiling pass."""
+        if not self.collects_gpu_metrics(tool):
+            return None
+
+        metadata = {
+            "tool": str(tool),
+            "algo": str(algo),
+            "dataset": dataset.name,
+            "runs": runs,
+            "profile_pass": "gpu",
+        }
+        print(f"Running separate GPU profiling pass for {tool} {algo}")
+        return self.gpu_profiler.profile(command, metadata)
+
     def finalize_flamegraph_candidates(
         self,
         candidates: List[ProfileResult],
@@ -189,7 +261,12 @@ class ProfilerManager:
             "dataset": dataset.name,
             "runs": configured_runs,
             "profiled_processes": len(candidates),
-            "hardware_counters": "not_collected_in_median_flamegraph_mode",
+            "callgraph_profiled_processes": len(candidates),
+            "hardware_counters": (
+                "pending_separate_perf_stat_pass"
+                if self.config.hardware_counters
+                else "not_requested"
+            ),
             "representative_run_index": (
                 selected_index + 1 if selected_index is not None else None
             ),
@@ -215,6 +292,10 @@ class ProfilerManager:
         ):
             selected.flamegraph_html = flamegraph_file
             selected.flamegraph_svg = flamegraph_file.with_suffix(".svg")
+            folded_file = selected.cpu_callgraph.with_suffix(".folded")
+            selected.cpu_callgraph_folded = (
+                folded_file if folded_file.exists() else None
+            )
 
         for index, candidate in enumerate(candidates):
             if (
@@ -275,13 +356,17 @@ def create_profiler_manager(
     gpu: bool = False,
     flamegraph: bool = False,
     output_dir: Optional[Path] = None,
+    hardware_counters: Optional[bool] = None,
 ) -> ProfilerManager:
     """Create profiler manager with specified configuration"""
+    if hardware_counters is None:
+        hardware_counters = cpu
+
     config_obj = ProfilingConfig(
         cpu_profiling=cpu,
         gpu_profiling=gpu,
         flamegraph=flamegraph,
-        hardware_counters=True,
+        hardware_counters=hardware_counters,
     )
 
     # Use custom output directory if provided, otherwise default

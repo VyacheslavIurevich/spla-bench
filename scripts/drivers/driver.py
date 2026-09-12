@@ -297,6 +297,87 @@ class Driver:
             dataset,
             algo,
             iterations)
+
+        counters_result = None
+        if self.profiler_manager.collects_hardware_counters():
+            counters_command = self._build_command(
+                dataset, algo, source, iterations)
+            try:
+                counters_result = self.profiler_manager.run_hardware_counters(
+                    counters_command,
+                    self.tool_name(),
+                    dataset,
+                    algo,
+                    iterations)
+            finally:
+                self._cleanup_profile_command()
+
+        if counters_result is not None:
+            profiling_result.cpu_hardware_counters = (
+                counters_result.cpu_hardware_counters
+            )
+            profiling_result.cpu_hardware_counters_file = (
+                counters_result.cpu_hardware_counters_file
+            )
+            profiling_result.merge_metrics_from(counters_result)
+            profiling_result.metadata.update({
+                'hardware_counters': (
+                    'collected_in_separate_perf_stat_pass'
+                    if counters_result.cpu_hardware_counters
+                    else 'separate_perf_stat_pass_failed'
+                ),
+                'hardware_counter_profiled_processes': 1,
+            })
+
+        gpu_result = None
+        if self.profiler_manager.collects_gpu_metrics(self.tool_name()):
+            gpu_command = self._build_command(
+                dataset, algo, source, iterations)
+            try:
+                gpu_result = self.profiler_manager.run_gpu_profile(
+                    gpu_command,
+                    self.tool_name(),
+                    dataset,
+                    algo,
+                    iterations)
+            finally:
+                self._cleanup_profile_command()
+
+        if gpu_result is not None:
+            profiling_result.gpu_timeline = gpu_result.gpu_timeline
+            profiling_result.gpu_timing = gpu_result.gpu_timing
+            profiling_result.gpu_memory = gpu_result.gpu_memory
+            profiling_result.merge_metrics_from(gpu_result)
+            for key, value in gpu_result.metadata.items():
+                if key not in {
+                    'tool', 'algo', 'dataset', 'runs', 'profile_pass'
+                }:
+                    profiling_result.metadata[key] = value
+            profiling_result.metadata.update({
+                'gpu_profile': (
+                    'collected'
+                    if gpu_result.gpu_timeline or gpu_result.numeric_metrics
+                    else 'failed'
+                ),
+                'gpu_profiled_processes': 1,
+            })
+
+        profiling_result.metadata['profiled_processes'] = (
+            len(candidates)
+            + int(counters_result is not None)
+            + int(gpu_result is not None)
+        )
+        profiling_result.metadata['profile_passes'] = (
+            ['flamegraph_callgraph']
+            + (
+                ['cpu_hardware_counters']
+                if counters_result is not None
+                else []
+            )
+            + (['gpu'] if gpu_result is not None else [])
+        )
+        profiling_result.metadata['profile_pass_count'] = len(
+            profiling_result.metadata['profile_passes'])
         profiling_result.metadata.update({
             'completed_runs': len(times),
             'representative_execution_time_ms': selected_time,

@@ -178,6 +178,7 @@ class GPUProfiler(Profiler):
                 metadata=metadata,
                 raw_output=command_result.stdout,
                 gpu_timeline=Path(analysis_file_path),
+                gpu_timing=timing_file if timing_file.exists() else None,
             )
             result.add_metric(
                 "gpu.spla_gpu_time",
