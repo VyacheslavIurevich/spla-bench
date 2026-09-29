@@ -75,9 +75,6 @@ def main():
                         choices=list(ResultsPrinter),
                         default=ResultsPrinter.all,
                         help='Measurement printer')
-    parser.add_argument('--profile',
-                        action='store_true',
-                        help='Enable CPU and GPU profiling')
     parser.add_argument('--cpu-profile',
                         action='store_true',
                         help='Enable CPU profiling')
@@ -86,7 +83,7 @@ def main():
                         help='Enable GPU profiling')
     parser.add_argument('--flamegraph',
                         action='store_true',
-                        help='Generate flamegraphs from CPU profiles')
+                        help='perf record callgraphs + flamegraph HTML/SVG (LAGraph and spla host CPU)')
 
     args = parser.parse_args()
 
@@ -94,14 +91,14 @@ def main():
     run_output_dir = summary.prepare_output_dir(Path(args.output))
 
     profiler_manager = None
-    if args.profile or args.cpu_profile or args.gpu_profile or args.flamegraph:
+    if args.cpu_profile or args.gpu_profile or args.flamegraph:
         from profiling.profiler_manager import create_profiler_manager
 
         profiler_manager = create_profiler_manager(
-            cpu=args.cpu_profile or args.profile or args.flamegraph,
-            gpu=args.gpu_profile or args.profile,
+            cpu=args.cpu_profile or args.flamegraph,
+            gpu=args.gpu_profile,
             flamegraph=args.flamegraph,
-            hardware_counters=args.cpu_profile or args.profile,
+            hardware_counters=args.cpu_profile,
             output_dir=run_output_dir / 'profiling')
 
     drivers: List[Driver] = []

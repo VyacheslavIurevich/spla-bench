@@ -300,12 +300,19 @@ main timing was obtained.
 
 ## 11. Benchmark CLI
 
-The following options were added:
+The following profiling options were added:
 
-- `--profile`;
-- `--cpu-profile`;
-- `--gpu-profile`;
-- `--flamegraph`.
+- `--cpu-profile` — separate `perf stat` pass (hardware counters);
+- `--gpu-profile` — GPU metrics pass (spla / Intel OpenCL);
+- `--flamegraph` — per-run `perf record` callgraphs and flamegraph SVG/HTML.
+
+Use `--cpu-profile` together with `--flamegraph` on LAGraph when both counters
+and callgraphs are needed. There is no combined “enable everything” shortcut flag.
+
+For spla, `--flamegraph` uses the same CPU `perf record` path on the benchmark
+process (host code, OpenCL runtime, synchronization). It does not show individual
+OpenCL kernels. Combine with `--gpu-profile` when GPU-side summary metrics are
+also needed.
 
 Parsing of `--format` was fixed.
 
