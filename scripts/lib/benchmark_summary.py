@@ -107,7 +107,7 @@ class BenchmarkSummary:
         recent_link = output_dir / 'recent'
         if recent_link.exists() or recent_link.is_symlink():
             recent_link.unlink()
-        os.symlink(output, recent_link, target_is_directory=True)
+        os.symlink(output.name, recent_link, target_is_directory=True)
 
         print_status('summary', 'dump', f'symlink: {recent_link}, original: {output}')
         return output
@@ -160,8 +160,14 @@ class BenchmarkSummary:
 
     def _dump_json(self, output: Path) -> None:
         results = []
+        logs_dir = output / 'logs'
+        logs_dir.mkdir(exist_ok=True)
         for algo, dataset, tool, result in self.measurements_list():
             timing = NumericMetric([float(value) for value in result.times], 'ms')
+            log_file = logs_dir / f'{tool}_{algo}_{dataset}.log'
+            log_file.write_text(result.raw_output)
+            metadata = dict(result.metadata)
+            metadata['raw_output_file'] = str(log_file.relative_to(output))
             results.append({
                 'algorithm': str(algo),
                 'dataset': dataset,
@@ -170,6 +176,7 @@ class BenchmarkSummary:
                 'warm_up_ms': result.warm_up,
                 'execution_time': timing.to_dict(),
                 'profiling': result.profiling.to_dict() if result.profiling else None,
+                'metadata': metadata,
             })
 
         output_file = output / 'benchmark_summary.json'

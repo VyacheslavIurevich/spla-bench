@@ -427,18 +427,17 @@ or to the .mtx
 
 """
 BENCHMARK_DATASETS = [
+    # Main comparison uses only undirected datasets. Directed collections
+    # require a separate experiment because stock spla examples symmetrize
+    # their Matrix Market input.
     'coAuthorsCiteseer',
     'coPapersDBLP',
-    'amazon-2008',
     # crashes on LaGraph BFS
     # 'hollywood-2009',
     'belgium_osm',
     'roadNet-CA',
     'com-Orkut',
-    'cit-Patents',
     'rgg_n_2_22_s0',
-    'soc-LiveJournal1',
-    # hangs 'indochina-2004',
     'rgg_n_2_23_s0',
     'road_central'
 ]

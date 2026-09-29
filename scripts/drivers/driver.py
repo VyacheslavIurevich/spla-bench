@@ -1,9 +1,11 @@
 import abc
+import os
+import subprocess
 import statistics
 
 from pathlib import Path
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 import lib.util as util
 import config as config
@@ -22,6 +24,8 @@ class ExecutionResult:
     warm_up: int
     times: List[int]
     profiling: Optional[object] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    raw_output: str = ""
 
     def avg(self):
         return statistics.mean(self.times) if self.times else 0.0
@@ -58,6 +62,8 @@ class ExecutionResult:
 class Driver:
     def __init__(self, profiler_manager: Optional[object] = None):
         self.profiler_manager = profiler_manager
+        self.executed_commands: List[List[str]] = []
+        self.captured_outputs: List[str] = []
         self.build()
 
     """
@@ -158,6 +164,61 @@ class Driver:
     def print_status(self, status: str, *args):
         util.print_status(self.tool_name(), status, *args)
 
+    def check_output(self, command: List, *args, **kwargs):
+        command = [str(value) for value in command]
+        self.executed_commands.append(command)
+        kwargs.setdefault("stderr", subprocess.STDOUT)
+        output = util.check_output(command, *args, **kwargs)
+        self.captured_outputs.append(
+            output.decode("ASCII", errors="replace")
+            if isinstance(output, bytes)
+            else str(output)
+        )
+        return output
+
+    def dependency_revision(self) -> Optional[str]:
+        source_dir = config.TOOL_CONFIG[self.tool_name()].sources
+        root = subprocess.run(
+            ["git", "-C", str(source_dir), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        )
+        if (
+            root.returncode != 0
+            or Path(root.stdout.strip()).resolve() != source_dir.resolve()
+        ):
+            return None
+        result = subprocess.run(
+            ["git", "-C", str(source_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    def implementation_description(self, algo: AlgorithmName) -> str:
+        descriptions = {
+            (ToolName.lagraph, AlgorithmName.bfs):
+                "stock parent-only push-pull BFS",
+            (ToolName.spla, AlgorithmName.bfs):
+                "stock level-producing adaptive BFS on GPU",
+            (ToolName.lagraph, AlgorithmName.sssp):
+                "stock LAGraph delta-stepping SSSP",
+            (ToolName.spla, AlgorithmName.sssp):
+                "stock spla SSSP with unit edge weights on GPU",
+            (ToolName.lagraph, AlgorithmName.tc):
+                "stock LAGraph TC demo method selection and sorting",
+            (ToolName.spla, AlgorithmName.tc):
+                "stock spla masked triangle counting on GPU",
+            (ToolName.lagraph, AlgorithmName.pr):
+                "stock GAP PageRank with L1 stopping criterion",
+            (ToolName.spla, AlgorithmName.pr):
+                "stock spla PageRank with L2 stopping criterion on GPU",
+        }
+        return descriptions.get(
+            (self.tool_name(), algo),
+            "stock implementation",
+        )
+
     def build(self) -> bool:
         build_tool(self.tool_name())
 
@@ -192,6 +253,8 @@ class Driver:
                           f'source={source}' if algo in [AlgorithmName.bfs, AlgorithmName.sssp] else '')
 
         result: ExecutionResult = None
+        self.executed_commands = []
+        self.captured_outputs = []
 
         if self.profiler_manager:
             result = self._run_with_profiling(dataset, algo, source, iterations)
@@ -204,6 +267,34 @@ class Driver:
                 result = self.run_tc(dataset, iterations)
             elif algo == AlgorithmName.pr:
                 result = self.run_pr(dataset, iterations)
+
+        if len(result.times) != iterations:
+            raise RuntimeError(
+                f"{self.tool_name()} {algo} produced {len(result.times)} "
+                f"measured samples, expected {iterations}"
+            )
+
+        result.raw_output = "\n".join(self.captured_outputs)
+        result.metadata.update({
+            "tool": str(self.tool_name()),
+            "backend": "gpu" if self.tool_name() == ToolName.spla else "cpu",
+            "dependency_revision": self.dependency_revision(),
+            "algorithm": str(algo),
+            "dataset": dataset.name,
+            "dataset_path": str(dataset.path),
+            "input_vertices": dataset.get_vertices(),
+            "input_edges": dataset.get_edges(),
+            "directed": dataset.get_directed(),
+            "source_vertex": (
+                source if algo in [AlgorithmName.bfs, AlgorithmName.sssp]
+                else None
+            ),
+            "configured_measured_runs": iterations,
+            "warm_up_runs": 1,
+            "commands": self.executed_commands,
+            "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+            "implementation": self.implementation_description(algo),
+        })
 
         self.print_status(
             'run', f'finish {str(algo.name)}', result.brief_str())
@@ -220,6 +311,7 @@ class Driver:
                 dataset, algo, source, iterations)
 
         command = self._build_command(dataset, algo, source, iterations)
+        self.executed_commands.append([str(value) for value in command])
         try:
             profiling_result = self.profiler_manager.run_profiling(
                 command, self.tool_name(), dataset, algo, iterations)
@@ -228,6 +320,8 @@ class Driver:
 
         result = self._parse_profiled_output(
             dataset, algo, profiling_result.raw_output, iterations)
+        if profiling_result.raw_output:
+            self.captured_outputs.append(profiling_result.raw_output)
         profiling_result.add_metric('benchmark.time', result.times, 'ms')
         profiling_result.add_metric('benchmark.warm_up', [result.warm_up], 'ms')
         profiling_result.metadata['completed_runs'] = len(result.times)
@@ -246,6 +340,7 @@ class Driver:
 
         for run_index in range(1, iterations + 1):
             command = self._build_command(dataset, algo, source, 1)
+            self.executed_commands.append([str(value) for value in command])
             try:
                 candidate = self.profiler_manager.run_flamegraph_candidate(
                     command,
@@ -255,6 +350,8 @@ class Driver:
                     run_index)
                 candidate_result = self._parse_profiled_output(
                     dataset, algo, candidate.raw_output, 1)
+                if candidate.raw_output:
+                    self.captured_outputs.append(candidate.raw_output)
             finally:
                 self._cleanup_profile_command()
 

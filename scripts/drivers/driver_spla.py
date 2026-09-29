@@ -5,10 +5,18 @@ from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.tool import ToolName
 from lib.dataset import DatasetValueType
-from lib.util import check_output
 
 
 class DriverSpla(driver.Driver):
+    @staticmethod
+    def _benchmark_flags(num_iterations: int) -> List[str]:
+        return [
+            f"--niters={num_iterations + 1}",
+            "--run-cpu=false",
+            "--run-ref=false",
+            "--run-gpu=true",
+        ]
+
     def can_run_bfs(self, dataset: Dataset) -> bool:
         return True
 
@@ -26,11 +34,11 @@ class DriverSpla(driver.Driver):
                 source_vertex: int,
                 num_iterations: int) -> driver.ExecutionResult:
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.bfs),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--source={source_vertex}"
+            f"--source={source_vertex}",
+            *self._benchmark_flags(num_iterations),
         ])
 
         return DriverSpla._parse_output(output)
@@ -40,11 +48,11 @@ class DriverSpla(driver.Driver):
                  source_vertex: int,
                  num_iterations: int) -> driver.ExecutionResult:
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.sssp),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--source={source_vertex}"
+            f"--source={source_vertex}",
+            *self._benchmark_flags(num_iterations),
         ])
 
         return DriverSpla._parse_output(output)
@@ -55,11 +63,11 @@ class DriverSpla(driver.Driver):
 
         dir_flag = 'true' if not dataset.get_directed() else 'false'
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.tc),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--undirected={dir_flag}"
+            f"--undirected={dir_flag}",
+            *self._benchmark_flags(num_iterations),
         ])
         return DriverSpla._parse_output(output)
 
@@ -67,11 +75,10 @@ class DriverSpla(driver.Driver):
                dataset: Dataset,
                num_iterations: int) -> driver.ExecutionResult:
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.pr),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--eps=1e-4"
+            *self._benchmark_flags(num_iterations),
         ])
 
         return DriverSpla._parse_output(output)
@@ -88,30 +95,29 @@ class DriverSpla(driver.Driver):
             return [
                 str(self.exec_path(AlgorithmName.bfs)),
                 f"--mtxpath={dataset.path}",
-                f"--niters={iterations}",
-                f"--source={source}"
+                f"--source={source}",
+                *self._benchmark_flags(iterations),
             ]
         if algo == AlgorithmName.sssp:
             return [
                 str(self.exec_path(AlgorithmName.sssp)),
                 f"--mtxpath={dataset.path}",
-                f"--niters={iterations}",
-                f"--source={source}"
+                f"--source={source}",
+                *self._benchmark_flags(iterations),
             ]
         if algo == AlgorithmName.tc:
             dir_flag = 'true' if not dataset.get_directed() else 'false'
             return [
                 str(self.exec_path(AlgorithmName.tc)),
                 f"--mtxpath={dataset.path}",
-                f"--niters={iterations}",
-                f"--undirected={dir_flag}"
+                f"--undirected={dir_flag}",
+                *self._benchmark_flags(iterations),
             ]
         if algo == AlgorithmName.pr:
             return [
                 str(self.exec_path(AlgorithmName.pr)),
                 f"--mtxpath={dataset.path}",
-                f"--niters={iterations}",
-                f"--eps=1e-4"
+                *self._benchmark_flags(iterations),
             ]
         raise Exception(f"Algorithm {algo} not supported")
 

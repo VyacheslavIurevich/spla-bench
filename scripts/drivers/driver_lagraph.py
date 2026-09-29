@@ -1,5 +1,4 @@
 import os
-import re
 import time
 
 from typing import List
@@ -8,10 +7,38 @@ from drivers.driver import ExecutionResult, Driver
 from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.tool import ToolName
-from lib.util import check_output
 
 
 class DriverLaGraph(Driver):
+    @staticmethod
+    def _discard_first(
+        result: ExecutionResult,
+        measured_runs: int,
+    ) -> ExecutionResult:
+        if len(result.times) < measured_runs + 1:
+            return result
+        result.warm_up = result.times[0]
+        result.times = result.times[1:measured_runs + 1]
+        return result
+
+    def _collect_stock_trials(
+        self,
+        command: List,
+        line_start: str,
+        time_token: int,
+        measured_runs: int,
+    ) -> ExecutionResult:
+        samples = []
+        while len(samples) < measured_runs + 1:
+            output = self.check_output(command)
+            parsed = self._parse_output(output, line_start, time_token)
+            if not parsed.times:
+                raise RuntimeError(
+                    f"LAGraph command produced no '{line_start}' timings"
+                )
+            samples.extend(parsed.times)
+        return ExecutionResult(samples[0], samples[1:measured_runs + 1])
+
     def can_run_bfs(self, _: Dataset) -> bool:
         return True
 
@@ -29,51 +56,57 @@ class DriverLaGraph(Driver):
                 source_vertex: int,
                 num_iterations: int) -> ExecutionResult:
 
-        with TemporarySourcesFile([source_vertex + 1] * num_iterations) as sources_file:
-            output = check_output([
+        with TemporarySourcesFile([source_vertex + 1] * (num_iterations + 1)) as sources_file:
+            output = self.check_output([
                 self.exec_path(AlgorithmName.bfs),
                 dataset.path,
                 sources_file.name
             ])
 
-            return DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
+            return self._discard_first(
+                self._parse_output(output, "parent only", 9),
+                num_iterations,
+            )
 
     def run_sssp(self,
                  dataset: Dataset,
                  source_vertex: int,
                  num_iterations: int) -> ExecutionResult:
 
-        with TemporarySourcesFile([source_vertex + 1] * num_iterations) as sources_file:
-            output = check_output([
+        with TemporarySourcesFile([source_vertex + 1] * (num_iterations + 1)) as sources_file:
+            output = self.check_output([
                 self.exec_path(AlgorithmName.sssp),
                 dataset.path,
                 sources_file.name,
                 '1'
             ])
 
-            return DriverLaGraph._parse_output(output, "sssp", 8)
+            return self._discard_first(
+                self._parse_output(output, "sssp", 8),
+                num_iterations,
+            )
 
     def run_tc(self,
                dataset: Dataset,
                num_iterations: int) -> ExecutionResult:
 
-        output = check_output([
-            self.exec_path(AlgorithmName.tc),
-            dataset.path
-        ])
-
-        return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
+        return self._collect_stock_trials(
+            [self.exec_path(AlgorithmName.tc), dataset.path],
+            "trial ",
+            2,
+            num_iterations,
+        )
 
     def run_pr(self,
                dataset: Dataset,
                num_iterations: int) -> ExecutionResult:
 
-        output = check_output([
-            self.exec_path(AlgorithmName.pr),
-            dataset.path
-        ])
-
-        return DriverLaGraph._parse_output(output, "Avg: PR", 4)
+        return self._collect_stock_trials(
+            [self.exec_path(AlgorithmName.pr), dataset.path],
+            "trial:",
+            3,
+            num_iterations,
+        )
 
     def tool_name(self) -> ToolName:
         return ToolName.lagraph
@@ -84,7 +117,9 @@ class DriverLaGraph(Driver):
                        source: int,
                        iterations: int) -> List[str]:
         if algo == AlgorithmName.bfs:
-            self.sources_file = TemporarySourcesFile([source + 1] * iterations)
+            self.sources_file = TemporarySourcesFile(
+                [source + 1] * (iterations + 1)
+            )
             self.sources_file.__enter__()
             return [
                 str(self.exec_path(AlgorithmName.bfs)),
@@ -92,7 +127,9 @@ class DriverLaGraph(Driver):
                 self.sources_file.name
             ]
         if algo == AlgorithmName.sssp:
-            self.sources_file = TemporarySourcesFile([source + 1] * iterations)
+            self.sources_file = TemporarySourcesFile(
+                [source + 1] * (iterations + 1)
+            )
             self.sources_file.__enter__()
             return [
                 str(self.exec_path(AlgorithmName.sssp)),
@@ -122,24 +159,22 @@ class DriverLaGraph(Driver):
 
         output = raw_output.encode('ASCII', errors='ignore')
         if algo == AlgorithmName.bfs:
-            result = DriverLaGraph._parse_output(output, "level only", 9, "warmup", 4)
-            if result.times:
-                return result
-
-            avg_lines = lines_startswith(raw_output.split("\n"), "Avg: BFS")
-            if avg_lines:
-                match = re.search(
-                    r"Avg:\s+BFS.*?([0-9]+(?:\.[0-9]+)?)\s+sec",
-                    avg_lines[0])
-                if match:
-                    result.times = [float(match.group(1)) * 1000]
-            return result
+            return self._discard_first(
+                self._parse_output(output, "parent only", 9),
+                iterations,
+            )
         if algo == AlgorithmName.sssp:
-            return DriverLaGraph._parse_output(output, "sssp", 8)
+            return self._discard_first(
+                self._parse_output(output, "sssp", 8),
+                iterations,
+            )
         if algo == AlgorithmName.tc:
             return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
         if algo == AlgorithmName.pr:
-            return DriverLaGraph._parse_output(output, "Avg: PR", 4)
+            return self._discard_first(
+                self._parse_output(output, "trial:", 3),
+                iterations,
+            )
         return ExecutionResult(warm_up=0.0, times=[])
 
     @staticmethod
