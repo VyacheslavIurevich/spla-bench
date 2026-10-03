@@ -172,12 +172,7 @@ def build():
     lagraph_root = LAGRAPH_PATHS.sources.absolute()
 
     method = suitesparse_chosen_method()
-    method_str = "build"
-    if method == SuitesparseMethod.local:
-        method_str = "local"
-    elif method == SuitesparseMethod.download:
-        method_str = "download"
-    lagraph_build_dir = lagraph_root / f'build_{method_str}'
+    lagraph_build_dir = lagraph_root / f'build_{method.value}'
 
     if not os.path.exists(lagraph_build_dir):
         os.makedirs(lagraph_build_dir)
