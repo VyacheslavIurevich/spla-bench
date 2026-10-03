@@ -406,27 +406,7 @@ The SuiteSparse GraphBLAS integration was fixed:
 
 The build error message now lists the specific missing targets.
 
-## 14. Legacy Patching Scripts
-
-The following were added in the branch history:
-
-- `patchs/patch_lagraph_bfs.py`;
-- `patchs/patch_lagraph_tc.py`;
-- `patchs/README.md`.
-
-They relate to an earlier methodology for aligning implementations:
-
-- they switched LAGraph BFS to level-only;
-- they disabled sorting in LAGraph TC.
-
-For the current experiment comparing out-of-the-box implementations, these
-scripts are obsolete and must not be applied. The current drivers expect
-standard LAGraph `parent only` output.
-
-It is advisable to remove `patchs/` before the final merge so that the branch
-does not retain two conflicting methodologies.
-
-## 15. Changed Files
+## 14. Changed Files
 
 The following files differ from `main`:
 
@@ -452,10 +432,9 @@ The following files were added:
 - `scripts/profiling/gpu_profiler.py`;
 - `scripts/profiling/flamegraph.py`;
 - `scripts/profiling/parsers.py`;
-- `scripts/profiling/profiler_manager.py`;
-- legacy files in `patchs/`.
+- `scripts/profiling/profiler_manager.py`.
 
-## 16. Known Limitations
+## 15. Known Limitations
 
 - The main experiment deliberately compares different standard implementations,
   so not every timing ratio can be interpreted as the pure speedup of a single
@@ -473,7 +452,7 @@ The following files were added:
 - The README still contains some outdated wording describing PageRank as a
   future algorithm and an old spla link; these should be updated before the merge.
 
-## 17. Checks of Current Local Changes
+## 16. Checks of Current Local Changes
 
 The following checks were performed for the current methodology:
 
