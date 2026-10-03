@@ -169,7 +169,10 @@ class DriverLaGraph(Driver):
                 iterations,
             )
         if algo == AlgorithmName.tc:
-            return DriverLaGraph._parse_output(output, "trial ", 2, "nthreads: ", 3)
+            return self._discard_first(
+                self._parse_output(output, "trial ", 2),
+                iterations,
+            )
         if algo == AlgorithmName.pr:
             return self._discard_first(
                 self._parse_output(output, "trial:", 3),
@@ -180,22 +183,14 @@ class DriverLaGraph(Driver):
     @staticmethod
     def _parse_output(output: bytes,
                       trial_line_start: str,
-                      trial_line_token: int,
-                      warmup_line_start: str = None,
-                      warmup_line_token: int = None):
+                      trial_line_token: int):
         time_factor = 1000
         lines = output.decode("ASCII").split("\n")
         trials = []
         for trial_line in lines_startswith(lines, trial_line_start):
             trials.append(float(tokenize(trial_line)[
                           trial_line_token]) * time_factor)
-        warmup = 0
-        if warmup_line_start is not None:
-            warmup_lines = lines_startswith(lines, warmup_line_start)
-            if warmup_lines:
-                warmup = float(tokenize(warmup_lines[0])[
-                               warmup_line_token]) * time_factor
-        return ExecutionResult(warmup, trials)
+        return ExecutionResult(0, trials)
 
 
 def lines_startswith(lines: List[str], token) -> List[str]:
@@ -209,8 +204,6 @@ def tokenize(line: str) -> List[str]:
 class TemporarySourcesFile():
     def __init__(self, sources: List[int]):
         self.name = f'sources_{str(time.ctime())}_.mtx'
-        self.freeze = False
-        self.fd = None
         self.sources = sources
 
     def __enter__(self):
@@ -219,8 +212,7 @@ class TemporarySourcesFile():
         return self
 
     def __exit__(self, type, value, traceback):
-        if not self.freeze:
-            os.remove(self.name)
+        os.remove(self.name)
 
 
 def make_sources_content(sources: List[int]):

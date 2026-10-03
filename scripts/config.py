@@ -17,7 +17,6 @@ import numpy as np
 from scipy.io import mmread
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from typing import Dict
 
 
 """
@@ -360,16 +359,9 @@ Default source for the path-finding algorithms (bfs, sssp)
 """
 DEFAULT_SOURCE = 0
 
-# Cache to avoid recalculating for the same dataset multiple times
-_source_cache: Dict[str, int] = {
-    'coAuthorsCiteseer': 4,
-    'coPapersDBLP': 21,
-    'hollywood-2009': 46,
-    'belgium_osm': 0,
-    'roadNet-CA': 0,
-    'rgg_n_2_22_s0': 1,
-    'road_central': 4,
-}
+# Process-local cache to avoid recalculating a source for the same dataset.
+_source_cache: Dict[str, int] = {}
+
 
 def find_best_source(mtx_path: str, dataset_name: str, is_directed: bool) -> int:
     """
@@ -496,9 +488,6 @@ class ProfilingConfig:
     gpu_profiling: bool = False
     flamegraph: bool = False
     hardware_counters: bool = False
-
-
-PROFILING = ProfilingConfig()
 
 
 """

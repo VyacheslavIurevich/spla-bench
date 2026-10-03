@@ -26,7 +26,7 @@ else:
 # Add current directory for profiling imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from profiler_base import Profiler, ProfileResult
+from profiler_base import ProfileResult
 from cpu_profiler import CPUProfiler
 from gpu_profiler import GPUProfiler
 from flamegraph import FlamegraphGenerator
@@ -336,20 +336,6 @@ class ProfilerManager:
             json.dump(profiling_result.to_dict(), f, indent=2)
         print(f"Profiling JSON summary: {output_file}")
         return output_file
-
-    def get_profiling_summary(self) -> Dict[str, Any]:
-        """Get summary of profiling capabilities and results"""
-        summary = {
-            "cpu_profiling_enabled": self.config.cpu_profiling,
-            "gpu_profiling_enabled": self.config.gpu_profiling,
-            "flamegraph_enabled": self.config.flamegraph,
-            "cpu_profiler_available": self.cpu_profiler is not None,
-            "gpu_profiler_available": self.gpu_profiler is not None,
-            "flamegraph_available": self.flamegraph_generator is not None,
-            "output_directory": str(self.output_dir),
-        }
-        return summary
-
 
 def create_profiler_manager(
     cpu: bool = False,

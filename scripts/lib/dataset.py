@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import os
 import tempfile
 import shutil
@@ -6,8 +5,7 @@ import json
 
 from enum import Enum
 from pathlib import Path
-from operator import concat
-from typing import List, Any, Optional, Type, Callable, Dict
+from typing import List, Any, Type, Callable, Dict
 
 import config
 import lib.progress as progress
@@ -188,12 +186,6 @@ def dataset_type_from_repr(type_name: str) -> DatasetValueType:
     raise Exception(f'Can not build dataset type from {type_name}')
 
 
-@dataclass
-class DatasetProperties:
-    directed: Optional[bool]
-    element_type: Optional[DatasetValueType]
-
-
 class Dataset:
     def __init__(self, name: str):
         self.name = name
@@ -221,11 +213,6 @@ class Dataset:
             DatasetPropertiesCache.set(self.name, 'element_type', cached_type)
         return dataset_type_from_repr(cached_type)
 
-    def get_properties(self) -> DatasetProperties:
-        return DatasetProperties(
-            directed=self.get_directed(),
-            element_type=self.get_element_type())
-
     def get_edges(self) -> int:
         _, _, nvals = matrix.load_header(self.path)
         return nvals
@@ -243,9 +230,7 @@ class Dataset:
 
         if cached_directed is None:
             cached_directed = self.get_directed()
-            graph_kind = 'directed' if cached_directed else 'undirected'
-        else:
-            graph_kind = 'directed' if cached_directed else 'undirected'
+        graph_kind = 'directed' if cached_directed else 'undirected'
 
         if cached_element_type is None or cached_element_type == 'unknown':
             element_type = str(self.get_element_type())

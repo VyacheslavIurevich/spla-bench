@@ -195,30 +195,6 @@ class Driver:
         )
         return result.stdout.strip() if result.returncode == 0 else None
 
-    def implementation_description(self, algo: AlgorithmName) -> str:
-        descriptions = {
-            (ToolName.lagraph, AlgorithmName.bfs):
-                "stock parent-only push-pull BFS",
-            (ToolName.spla, AlgorithmName.bfs):
-                "stock level-producing adaptive BFS on GPU",
-            (ToolName.lagraph, AlgorithmName.sssp):
-                "stock LAGraph delta-stepping SSSP",
-            (ToolName.spla, AlgorithmName.sssp):
-                "stock spla SSSP with unit edge weights on GPU",
-            (ToolName.lagraph, AlgorithmName.tc):
-                "stock LAGraph TC demo method selection and sorting",
-            (ToolName.spla, AlgorithmName.tc):
-                "stock spla masked triangle counting on GPU",
-            (ToolName.lagraph, AlgorithmName.pr):
-                "stock GAP PageRank with L1 stopping criterion",
-            (ToolName.spla, AlgorithmName.pr):
-                "stock spla PageRank with L2 stopping criterion on GPU",
-        }
-        return descriptions.get(
-            (self.tool_name(), algo),
-            "stock implementation",
-        )
-
     def build(self) -> bool:
         build_tool(self.tool_name())
 
@@ -293,7 +269,6 @@ class Driver:
             "warm_up_runs": 1,
             "commands": self.executed_commands,
             "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
-            "implementation": self.implementation_description(algo),
         })
 
         self.print_status(

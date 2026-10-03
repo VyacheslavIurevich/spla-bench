@@ -4,7 +4,6 @@ from typing import List
 from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.tool import ToolName
-from lib.dataset import DatasetValueType
 
 
 class DriverSpla(driver.Driver):

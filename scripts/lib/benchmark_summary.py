@@ -84,13 +84,6 @@ class BenchmarkSummary:
     def results_per_algorithm(self) -> List[Tuple[AlgorithmName, Dict[str, Dict[ToolName, ExecutionResult]]]]:
         return list(self.measurements.items())
 
-    def results_per_algorithm_dataset(self) -> List[Tuple[AlgorithmName, str, Dict[ToolName, ExecutionResult]]]:
-        items = []
-        for algo, results in self.results_per_algorithm():
-            items.extend(
-                map(lambda item: (algo, item[0], item[1]), results.items()))
-        return items
-
     def measurements_list(self) -> List[Tuple[AlgorithmName, str, ToolName, ExecutionResult]]:
         items = []
         for algo, tool_by_dataset in self.measurements.items():

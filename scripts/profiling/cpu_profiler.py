@@ -154,25 +154,6 @@ class CPUProfiler(Profiler):
             print(f"Hardware counters profiling failed: {e}")
             return ProfileResult(metadata=metadata)
 
-    def profile(self, command: List[str], metadata: Dict[str, Any]) -> ProfileResult:
-        """Run CPU profiling"""
-        callgraph_result = self.profile_callgraph(command, metadata)
-
-        runs = metadata.get("runs", 5)
-        counters_result = self.profile_hardware_counters(command, runs, metadata)
-
-        result = ProfileResult(
-            cpu_callgraph=callgraph_result.cpu_callgraph,
-            cpu_hardware_counters=counters_result.cpu_hardware_counters,
-            cpu_hardware_counters_file=(
-                counters_result.cpu_hardware_counters_file
-            ),
-            raw_output=callgraph_result.raw_output,
-            metadata=metadata,
-        )
-        result.merge_metrics_from(counters_result)
-        return result
-
     def parse_results(self, raw_output: bytes) -> Dict[str, Any]:
         """Parse profiling results"""
         return {}
@@ -235,22 +216,3 @@ class CPUProfiler(Profiler):
         except ValueError:
             return None
         return int(parsed) if parsed.is_integer() else parsed
-
-    def generate_report(self, perf_file: Path) -> str:
-        """Generate human-readable report from perf data"""
-        try:
-            result = subprocess.run(
-                [
-                    self.perf_path,
-                    "report",
-                    "--stdio",
-                    "--no-children",
-                    "-i",
-                    str(perf_file),
-                ],
-                capture_output=True,
-                text=True,
-            )
-            return result.stdout
-        except subprocess.CalledProcessError:
-            return ""

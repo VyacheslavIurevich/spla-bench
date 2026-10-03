@@ -4,10 +4,8 @@ Flamegraph generator for CPU callgraphs
 
 import subprocess
 import shutil
-from collections import Counter
 from pathlib import Path
-from typing import List, Optional
-from profiler_base import Profiler
+from typing import Optional
 
 
 class FlamegraphGenerator:
@@ -128,34 +126,6 @@ class FlamegraphGenerator:
             print(f"Failed to generate flamegraph from folded stacks: {e}")
             return False
 
-    def aggregate_folded_files(self,
-                               folded_files: List[Path],
-                               output_folded: Path) -> bool:
-        """Aggregate folded stacks by summing samples for equal stack keys"""
-        stacks = Counter()
-        for folded_file in folded_files:
-            if not folded_file.exists():
-                continue
-            with open(folded_file, "r") as source:
-                for line in source:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        stack, samples = line.rsplit(" ", 1)
-                        stacks[stack] += int(samples)
-                    except ValueError:
-                        continue
-
-        if not stacks:
-            return False
-
-        output_folded.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_folded, "w") as output:
-            for stack, samples in sorted(stacks.items()):
-                output.write(f"{stack} {samples}\n")
-        return True
-
     def generate_interactive_flamegraph(
         self, perf_file: Path, output_html: Path
     ) -> bool:
@@ -194,44 +164,6 @@ class FlamegraphGenerator:
             return True
         except Exception as e:
             print(f"Failed to create interactive flamegraph: {e}")
-            return False
-
-    def generate_interactive_flamegraph_from_folded(
-        self, folded_file: Path, output_html: Path
-    ) -> bool:
-        """Generate interactive HTML flamegraph from folded stack data"""
-        svg_file = output_html.with_suffix(".svg")
-        if not self.generate_flamegraph_from_folded(folded_file, svg_file):
-            return False
-
-        html_content = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Aggregate Flamegraph</title>
-    <style>
-        body {{ margin: 0; padding: 20px; font-family: Arial, sans-serif; }}
-        .container {{ max-width: 100%; overflow: auto; }}
-        h1 {{ text-align: center; }}
-        svg {{ max-width: 100%; height: auto; }}
-    </style>
-</head>
-<body>
-    <h1>Aggregate Flamegraph</h1>
-    <div class="container">
-        <iframe src="{svg_file.name}" width="100%" height="1000" style="border: none;"></iframe>
-    </div>
-</body>
-</html>
-"""
-
-        try:
-            with open(output_html, "w") as f:
-                f.write(html_content)
-            print(f"Aggregate interactive flamegraph saved to {output_html}")
-            return True
-        except Exception as e:
-            print(f"Failed to create aggregate interactive flamegraph: {e}")
             return False
 
     def cleanup(self):

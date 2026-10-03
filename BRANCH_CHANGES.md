@@ -100,13 +100,10 @@ Automatic source selection was added for BFS and SSSP:
 1. the matrix is read with SciPy;
 2. the largest connected component is found;
 3. the vertex whose degree is closest to the median is selected from that component;
-4. the result is cached for repeated runs.
+4. the result is cached only for the lifetime of the current process.
 
 For a directed graph, the largest strongly connected component was used.
 The undirected variant is used for the current main dataset.
-
-A precomputed source cache was added for known large graphs to avoid reading a
-multi-gigabyte matrix before each algorithm.
 
 ## 5. Dataset Handling
 
@@ -200,7 +197,6 @@ The common driver now:
 - combines stdout and stderr;
 - determines the dependency revision if `deps` is a standalone Git worktree;
 - records the backend, algorithm, dataset, source, and repetition parameters;
-- records a description of the specific standard implementation;
 - checks the number of measurements;
 - passes raw output to the final summary.
 
@@ -366,7 +362,6 @@ Metadata contains:
 - the number of warm-up runs;
 - `OMP_NUM_THREADS`;
 - full commands;
-- a description of the standard implementation;
 - the path to the raw output.
 
 ### Raw output
@@ -431,7 +426,6 @@ The following files were added:
 - `scripts/profiling/cpu_profiler.py`;
 - `scripts/profiling/gpu_profiler.py`;
 - `scripts/profiling/flamegraph.py`;
-- `scripts/profiling/parsers.py`;
 - `scripts/profiling/profiler_manager.py`.
 
 ## 15. Known Limitations
