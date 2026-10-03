@@ -1,20 +1,32 @@
 import drivers.driver as driver
 
+from typing import List
 from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
 from lib.tool import ToolName
 from lib.dataset import DatasetValueType
-from lib.util import check_output
 
 
 class DriverSpla(driver.Driver):
+    @staticmethod
+    def _benchmark_flags(num_iterations: int) -> List[str]:
+        return [
+            f"--niters={num_iterations + 1}",
+            "--run-cpu=false",
+            "--run-ref=false",
+            "--run-gpu=true",
+        ]
+
     def can_run_bfs(self, dataset: Dataset) -> bool:
-        return dataset.get_element_type() == DatasetValueType.void
+        return True
 
     def can_run_sssp(self, dataset: Dataset) -> bool:
-        return dataset.get_element_type() == DatasetValueType.float
+        return True
 
     def can_run_tc(self, dataset: Dataset) -> bool:
+        return True
+
+    def can_run_pr(self, dataset: Dataset) -> bool:
         return True
 
     def run_bfs(self,
@@ -22,11 +34,11 @@ class DriverSpla(driver.Driver):
                 source_vertex: int,
                 num_iterations: int) -> driver.ExecutionResult:
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.bfs),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--source={source_vertex}"
+            f"--source={source_vertex}",
+            *self._benchmark_flags(num_iterations),
         ])
 
         return DriverSpla._parse_output(output)
@@ -36,11 +48,11 @@ class DriverSpla(driver.Driver):
                  source_vertex: int,
                  num_iterations: int) -> driver.ExecutionResult:
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.sssp),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--source={source_vertex}"
+            f"--source={source_vertex}",
+            *self._benchmark_flags(num_iterations),
         ])
 
         return DriverSpla._parse_output(output)
@@ -51,16 +63,72 @@ class DriverSpla(driver.Driver):
 
         dir_flag = 'true' if not dataset.get_directed() else 'false'
 
-        output = check_output([
+        output = self.check_output([
             self.exec_path(AlgorithmName.tc),
             f"--mtxpath={dataset.path}",
-            f"--niters={num_iterations}",
-            f"--undirected={dir_flag}"
+            f"--undirected={dir_flag}",
+            *self._benchmark_flags(num_iterations),
         ])
+        return DriverSpla._parse_output(output)
+
+    def run_pr(self,
+               dataset: Dataset,
+               num_iterations: int) -> driver.ExecutionResult:
+
+        output = self.check_output([
+            self.exec_path(AlgorithmName.pr),
+            f"--mtxpath={dataset.path}",
+            *self._benchmark_flags(num_iterations),
+        ])
+
         return DriverSpla._parse_output(output)
 
     def tool_name(self) -> ToolName:
         return ToolName.spla
+
+    def _build_command(self,
+                       dataset: Dataset,
+                       algo: AlgorithmName,
+                       source: int,
+                       iterations: int) -> List[str]:
+        if algo == AlgorithmName.bfs:
+            return [
+                str(self.exec_path(AlgorithmName.bfs)),
+                f"--mtxpath={dataset.path}",
+                f"--source={source}",
+                *self._benchmark_flags(iterations),
+            ]
+        if algo == AlgorithmName.sssp:
+            return [
+                str(self.exec_path(AlgorithmName.sssp)),
+                f"--mtxpath={dataset.path}",
+                f"--source={source}",
+                *self._benchmark_flags(iterations),
+            ]
+        if algo == AlgorithmName.tc:
+            dir_flag = 'true' if not dataset.get_directed() else 'false'
+            return [
+                str(self.exec_path(AlgorithmName.tc)),
+                f"--mtxpath={dataset.path}",
+                f"--undirected={dir_flag}",
+                *self._benchmark_flags(iterations),
+            ]
+        if algo == AlgorithmName.pr:
+            return [
+                str(self.exec_path(AlgorithmName.pr)),
+                f"--mtxpath={dataset.path}",
+                *self._benchmark_flags(iterations),
+            ]
+        raise Exception(f"Algorithm {algo} not supported")
+
+    def _parse_profiled_output(self,
+                               dataset: Dataset,
+                               algo: AlgorithmName,
+                               raw_output: str,
+                               iterations: int) -> driver.ExecutionResult:
+        if raw_output is None:
+            return driver.ExecutionResult(warm_up=0.0, times=[])
+        return DriverSpla._parse_output(raw_output.encode('ASCII', errors='ignore'))
 
     @staticmethod
     def _parse_output(output):
@@ -68,8 +136,28 @@ class DriverSpla(driver.Driver):
         warmup = 0.0
         runs = []
         for line in lines:
-            if line.startswith("warm-up(ms):"):
-                warmup = float(line.split(" ")[1])
-            if line.startswith("iters(ms):"):
-                runs = [float(v) for v in line.split(" ")[1:-1]]
+            # Parse GPU timings if available, otherwise use CPU timings
+            if line.startswith("gpu(ms):"):
+                timings_str = line.replace("gpu(ms):", "").strip()
+                timings = [
+                    float(v.strip()) for v in timings_str.split(",") if v.strip()
+                ]
+                if timings:
+                    if len(timings) > 1:
+                        warmup = timings[0]
+                        runs = timings[1:]
+                    else:
+                        runs = timings
+            elif line.startswith("cpu(ms):") and not runs:
+                timings_str = line.replace("cpu(ms):", "").strip()
+                timings = [
+                    float(v.strip()) for v in timings_str.split(",") if v.strip()
+                ]
+                if timings:
+                    if len(timings) > 1:
+                        warmup = timings[0]
+                        runs = timings[1:]
+                    else:
+                        runs = timings
+
         return driver.ExecutionResult(warmup, runs)

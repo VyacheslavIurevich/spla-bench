@@ -6,7 +6,7 @@
 	url = https://github.com/gunrock/gunrock.git
 [submodule "deps/lagraph"]
 	path = deps/lagraph
-	url = https://github.com/GraphBLAS/LAGraph
+	url = https://github.com/GraphBLAS/LAGraph.git
 [submodule "deps/spla"]
 	path = deps/spla
-	url = https://github.com/JetBrains-Research/spla
+	url = https://github.com/SparseLinearAlgebra/spla.git
