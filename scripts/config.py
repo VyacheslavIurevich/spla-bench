@@ -485,7 +485,6 @@ Profiling configuration
 @dataclass
 class ProfilingConfig:
     cpu_profiling: bool = False
-    gpu_profiling: bool = False
     flamegraph: bool = False
     hardware_counters: bool = False
 

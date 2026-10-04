@@ -80,9 +80,6 @@ class ProfileResult:
     cpu_callgraph_folded: Optional[Path] = None
     cpu_hardware_counters: Optional[Dict[str, Any]] = None
     cpu_hardware_counters_file: Optional[Path] = None
-    gpu_timeline: Optional[Path] = None
-    gpu_timing: Optional[Path] = None
-    gpu_memory: Optional[Path] = None
     flamegraph_svg: Optional[Path] = None
     flamegraph_html: Optional[Path] = None
     raw_output: Optional[str] = None
@@ -92,10 +89,6 @@ class ProfileResult:
     def has_cpu_data(self) -> bool:
         """Check if CPU profiling data is available"""
         return self.cpu_callgraph is not None or self.cpu_hardware_counters is not None
-
-    def has_gpu_data(self) -> bool:
-        """Check if GPU profiling data is available"""
-        return self.gpu_timeline is not None or self.gpu_memory is not None
 
     def has_flamegraph(self) -> bool:
         """Check if flamegraph is available"""
@@ -131,9 +124,6 @@ class ProfileResult:
                     if self.cpu_hardware_counters_file
                     else None
                 ),
-                "gpu_timeline": str(self.gpu_timeline) if self.gpu_timeline else None,
-                "gpu_timing": str(self.gpu_timing) if self.gpu_timing else None,
-                "gpu_memory": str(self.gpu_memory) if self.gpu_memory else None,
                 "flamegraph_svg": str(self.flamegraph_svg) if self.flamegraph_svg else None,
                 "flamegraph_html": str(self.flamegraph_html) if self.flamegraph_html else None,
             },

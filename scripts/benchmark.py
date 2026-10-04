@@ -78,9 +78,6 @@ def main():
     parser.add_argument('--cpu-profile',
                         action='store_true',
                         help='Enable CPU profiling')
-    parser.add_argument('--gpu-profile',
-                        action='store_true',
-                        help='Enable GPU profiling')
     parser.add_argument('--flamegraph',
                         action='store_true',
                         help='perf record callgraphs + flamegraph HTML/SVG (LAGraph and spla host CPU)')
@@ -91,12 +88,11 @@ def main():
     run_output_dir = summary.prepare_output_dir(Path(args.output))
 
     profiler_manager = None
-    if args.cpu_profile or args.gpu_profile or args.flamegraph:
+    if args.cpu_profile or args.flamegraph:
         from profiling.profiler_manager import create_profiler_manager
 
         profiler_manager = create_profiler_manager(
             cpu=args.cpu_profile or args.flamegraph,
-            gpu=args.gpu_profile,
             flamegraph=args.flamegraph,
             hardware_counters=args.cpu_profile,
             output_dir=run_output_dir / 'profiling')

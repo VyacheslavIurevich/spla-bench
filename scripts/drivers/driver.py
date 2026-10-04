@@ -44,8 +44,6 @@ class ExecutionResult:
         )
         if self.profiling and self.profiling.has_cpu_data():
             result += ', profile=cpu'
-        if self.profiling and self.profiling.has_gpu_data():
-            result += ', profile=gpu'
         if self.profiling and self.profiling.has_flamegraph():
             result += ', flamegraph'
         if self.profiling and self.profiling.numeric_metrics:
@@ -401,43 +399,9 @@ class Driver:
                 'hardware_counter_profiled_processes': 1,
             })
 
-        gpu_result = None
-        if self.profiler_manager.collects_gpu_metrics(self.tool_name()):
-            gpu_command = self._build_command(
-                dataset, algo, source, iterations)
-            try:
-                gpu_result = self.profiler_manager.run_gpu_profile(
-                    gpu_command,
-                    self.tool_name(),
-                    dataset,
-                    algo,
-                    iterations)
-            finally:
-                self._cleanup_profile_command()
-
-        if gpu_result is not None:
-            profiling_result.gpu_timeline = gpu_result.gpu_timeline
-            profiling_result.gpu_timing = gpu_result.gpu_timing
-            profiling_result.gpu_memory = gpu_result.gpu_memory
-            profiling_result.merge_metrics_from(gpu_result)
-            for key, value in gpu_result.metadata.items():
-                if key not in {
-                    'tool', 'algo', 'dataset', 'runs', 'profile_pass'
-                }:
-                    profiling_result.metadata[key] = value
-            profiling_result.metadata.update({
-                'gpu_profile': (
-                    'collected'
-                    if gpu_result.gpu_timeline or gpu_result.numeric_metrics
-                    else 'failed'
-                ),
-                'gpu_profiled_processes': 1,
-            })
-
         profiling_result.metadata['profiled_processes'] = (
             len(candidates)
             + int(counters_result is not None)
-            + int(gpu_result is not None)
         )
         profiling_result.metadata['profile_passes'] = (
             ['flamegraph_callgraph']
@@ -446,7 +410,6 @@ class Driver:
                 if counters_result is not None
                 else []
             )
-            + (['gpu'] if gpu_result is not None else [])
         )
         profiling_result.metadata['profile_pass_count'] = len(
             profiling_result.metadata['profile_passes'])
@@ -462,6 +425,10 @@ class Driver:
         self.profiler_manager.write_profile_summary(profiling_result)
 
         result = ExecutionResult(warm_up=warm_up, times=times)
+        if selected_index is not None:
+            result.metadata.update(candidate_results[selected_index].metadata)
+        elif candidate_results:
+            result.metadata.update(candidate_results[0].metadata)
         result.profiling = profiling_result
         return result
 

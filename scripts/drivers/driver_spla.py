@@ -1,5 +1,7 @@
 import drivers.driver as driver
 
+import re
+
 from typing import List
 from lib.dataset import Dataset
 from lib.algorithm import AlgorithmName
@@ -7,6 +9,15 @@ from lib.tool import ToolName
 
 
 class DriverSpla(driver.Driver):
+    OPENCL_ERRORS = (
+        "CL_OUT_OF_RESOURCES",
+        "CL_MEM_OBJECT_ALLOCATION_FAILURE",
+        "CL_INVALID_ARG_VALUE",
+        "CL_INVALID_OPERATION",
+        "CL_BUILD_PROGRAM_FAILURE",
+        "CL_INVALID_KERNEL_NAME",
+    )
+
     @staticmethod
     def _benchmark_flags(num_iterations: int) -> List[str]:
         return [
@@ -131,7 +142,8 @@ class DriverSpla(driver.Driver):
 
     @staticmethod
     def _parse_output(output):
-        lines = output.decode("ASCII").replace("\r", "").split("\n")
+        text = output.decode("ASCII", errors="ignore").replace("\r", "")
+        lines = text.split("\n")
         warmup = 0.0
         runs = []
         for line in lines:
@@ -159,4 +171,33 @@ class DriverSpla(driver.Driver):
                     else:
                         runs = timings
 
-        return driver.ExecutionResult(warmup, runs)
+        result = driver.ExecutionResult(warmup, runs)
+
+        env_match = re.search(
+            r"^env:\s*(?P<platform>.*?)\s+"
+            r"device:\s*(?P<device>.*?)\s+"
+            r"vendor:(?P<vendor>\S+)\s+"
+            r"mcu:(?P<mcu>\d+)\s+"
+            r"wave:(?P<wave>\d+)\s+"
+            r"mwgs:(?P<mwgs>\d+)\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if env_match:
+            result.metadata.update({
+                "gpu_platform": env_match.group("platform"),
+                "gpu_device": env_match.group("device"),
+                "gpu_vendor": env_match.group("vendor"),
+                "gpu_max_compute_units": int(env_match.group("mcu")),
+                "gpu_wave_size": int(env_match.group("wave")),
+                "gpu_max_work_group_size": int(env_match.group("mwgs")),
+            })
+
+        error_counts = {
+            error: text.count(error)
+            for error in DriverSpla.OPENCL_ERRORS
+            if error in text
+        }
+        result.metadata["opencl_error_counts"] = error_counts
+
+        return result

@@ -28,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from profiler_base import ProfileResult
 from cpu_profiler import CPUProfiler
-from gpu_profiler import GPUProfiler
 from flamegraph import FlamegraphGenerator
 
 
@@ -45,7 +44,6 @@ class ProfilerManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.cpu_profiler: Optional[CPUProfiler] = None
-        self.gpu_profiler: Optional[GPUProfiler] = None
         self.flamegraph_generator: Optional[FlamegraphGenerator] = None
 
         self._setup_profilers()
@@ -58,14 +56,6 @@ class ProfilerManager:
                 print("CPU profiler setup failed, disabling CPU profiling")
                 self.cpu_profiler = None
                 self.config.cpu_profiling = False
-
-        if self.config.gpu_profiling:
-            # GPU profiler now includes Intel GPU support
-            self.gpu_profiler = GPUProfiler(self.output_dir / "gpu")
-            if not self.gpu_profiler.setup():
-                print("GPU profiler setup failed, disabling GPU profiling")
-                self.gpu_profiler = None
-                self.config.gpu_profiling = False
 
         if self.config.flamegraph:
             self.flamegraph_generator = FlamegraphGenerator()
@@ -118,30 +108,6 @@ class ProfilerManager:
             profiled_processes += 1
             profile_passes.append("cpu_hardware_counters")
 
-        if (
-            self.config.gpu_profiling
-            and self.gpu_profiler
-            and self.supports_gpu_profiling(tool)
-        ):
-            print(f"Running GPU profiling for {tool} {algo}")
-            gpu_result = self.gpu_profiler.profile(command, metadata)
-            profiling_result.gpu_timeline = gpu_result.gpu_timeline
-            profiling_result.gpu_timing = gpu_result.gpu_timing
-            profiling_result.gpu_memory = gpu_result.gpu_memory
-            profiling_result.raw_output = (
-                profiling_result.raw_output or gpu_result.raw_output
-            )
-            profiling_result.merge_metrics_from(gpu_result)
-            profiling_result.metadata.update(gpu_result.metadata)
-            profiling_result.metadata["gpu_profile"] = (
-                "collected"
-                if gpu_result.gpu_timeline or gpu_result.numeric_metrics
-                else "failed"
-            )
-            profiling_result.metadata["gpu_profiled_processes"] = 1
-            profiled_processes += 1
-            profile_passes.append("gpu")
-
         profiling_result.metadata["profiled_processes"] = profiled_processes
         profiling_result.metadata["profile_passes"] = profile_passes
         profiling_result.metadata["profile_pass_count"] = len(profile_passes)
@@ -159,18 +125,6 @@ class ProfilerManager:
     def collects_hardware_counters(self) -> bool:
         """Whether a separate perf stat pass was explicitly requested."""
         return bool(self.config.hardware_counters and self.cpu_profiler)
-
-    def supports_gpu_profiling(self, tool: Any) -> bool:
-        """Whether GPU profiling is implemented for this tool."""
-        return str(tool) not in ["gunrock", "graphblast"]
-
-    def collects_gpu_metrics(self, tool: Any) -> bool:
-        """Whether a separate GPU profiling pass was requested."""
-        return bool(
-            self.config.gpu_profiling
-            and self.gpu_profiler
-            and self.supports_gpu_profiling(tool)
-        )
 
     def run_flamegraph_candidate(
         self,
@@ -220,28 +174,6 @@ class ProfilerManager:
         return self.cpu_profiler.profile_hardware_counters(
             command, runs, metadata
         )
-
-    def run_gpu_profile(
-        self,
-        command: List[str],
-        tool: Any,
-        dataset: Any,
-        algo: Any,
-        runs: int,
-    ) -> Optional[ProfileResult]:
-        """Run the explicitly requested GPU profiling pass."""
-        if not self.collects_gpu_metrics(tool):
-            return None
-
-        metadata = {
-            "tool": str(tool),
-            "algo": str(algo),
-            "dataset": dataset.name,
-            "runs": runs,
-            "profile_pass": "gpu",
-        }
-        print(f"Running separate GPU profiling pass for {tool} {algo}")
-        return self.gpu_profiler.profile(command, metadata)
 
     def finalize_flamegraph_candidates(
         self,
@@ -314,8 +246,6 @@ class ProfilerManager:
         """Cleanup profiling resources"""
         if self.cpu_profiler:
             self.cpu_profiler.cleanup()
-        if self.gpu_profiler:
-            self.gpu_profiler.cleanup()
         if self.flamegraph_generator:
             self.flamegraph_generator.cleanup()
 
@@ -339,7 +269,6 @@ class ProfilerManager:
 
 def create_profiler_manager(
     cpu: bool = False,
-    gpu: bool = False,
     flamegraph: bool = False,
     output_dir: Optional[Path] = None,
     hardware_counters: Optional[bool] = None,
@@ -350,7 +279,6 @@ def create_profiler_manager(
 
     config_obj = ProfilingConfig(
         cpu_profiling=cpu,
-        gpu_profiling=gpu,
         flamegraph=flamegraph,
         hardware_counters=hardware_counters,
     )

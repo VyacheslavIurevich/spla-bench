@@ -220,7 +220,9 @@ The parser:
 - uses `gpu(ms):` preferentially;
 - retains the first GPU sample as the warm-up;
 - uses the remaining samples as measurements;
-- retains CPU timing only as a fallback for parsing old output.
+- retains CPU timing only as a fallback for parsing old output;
+- records the `env:` platform, device, vendor, `mcu`, `wave`, and `mwgs`;
+- records counts of known OpenCL error strings from the same stdout.
 
 ## 10. Profiling
 
@@ -255,19 +257,6 @@ For numeric metrics, the following are calculated:
 - retention of folded stacks;
 - collection of cycles, instructions, cache misses, LLC misses, and branch misses.
 
-### GPU Profiling
-
-`gpu_profiler.py` targets Intel GPU/OpenCL:
-
-- checks the device with `clinfo`;
-- retains platform and device information;
-- parses GPU/CPU timing from spla output;
-- retains process-time and system-memory information;
-- detects known OpenCL errors and warnings.
-
-This profiler is not a full timeline of OpenCL kernels and is not intended for
-NVIDIA CUDA.
-
 ### Flamegraph
 
 `flamegraph.py`:
@@ -283,23 +272,21 @@ NVIDIA CUDA.
 
 - the CPU call graph;
 - hardware counters;
-- GPU profiling;
 - flamegraph generation;
 - JSON summary output.
 
 In flamegraph mode, separate profiled processes are executed. The run whose
 time is closest to the median is selected for visualization.
 
-Hardware counters and the GPU profile may be collected in separate additional
-passes and do not necessarily correspond to the same process from which the
-main timing was obtained.
+Hardware counters may be collected in a separate additional pass and do not
+necessarily correspond to the same process from which the main timing was
+obtained.
 
 ## 11. Benchmark CLI
 
 The following profiling options were added:
 
 - `--cpu-profile` — separate `perf stat` pass (hardware counters);
-- `--gpu-profile` — GPU metrics pass (spla / Intel OpenCL);
 - `--flamegraph` — per-run `perf record` callgraphs and flamegraph SVG/HTML.
 
 Use `--cpu-profile` together with `--flamegraph` on LAGraph when both counters
@@ -307,8 +294,8 @@ and callgraphs are needed. There is no combined “enable everything” shortcut
 
 For spla, `--flamegraph` uses the same CPU `perf record` path on the benchmark
 process (host code, OpenCL runtime, synchronization). It does not show individual
-OpenCL kernels. Combine with `--gpu-profile` when GPU-side summary metrics are
-also needed.
+OpenCL kernels. GPU device fields and OpenCL errors are parsed from the same
+spla stdout as the timings and do not require a separate profiler.
 
 Parsing of `--format` was fixed.
 
@@ -362,6 +349,7 @@ Metadata contains:
 - the number of warm-up runs;
 - `OMP_NUM_THREADS`;
 - full commands;
+- for spla, the `env:` device description and OpenCL error counts;
 - the path to the raw output.
 
 ### Raw output
@@ -424,7 +412,6 @@ The following files were added:
 - `scripts/profiling/__init__.py`;
 - `scripts/profiling/profiler_base.py`;
 - `scripts/profiling/cpu_profiler.py`;
-- `scripts/profiling/gpu_profiler.py`;
 - `scripts/profiling/flamegraph.py`;
 - `scripts/profiling/profiler_manager.py`.
 
@@ -434,7 +421,8 @@ The following files were added:
   so not every timing ratio can be interpreted as the pure speedup of a single
   algorithmic kernel.
 - PageRank uses different internal stopping norms.
-- The current GPU profiler targets Intel OpenCL.
+- spla GPU device fields come from the library `env:` line, not from a separate
+  OpenCL kernel profiler.
 - The strict parser terminates the run with an error if the output format of a
   third-party demonstration program changes.
 - Gunrock and GraphBLAST did not receive the same level of metadata and profiling
