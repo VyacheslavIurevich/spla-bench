@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import os
 import tempfile
 import shutil
@@ -6,8 +5,7 @@ import json
 
 from enum import Enum
 from pathlib import Path
-from operator import concat
-from typing import List, Any, Optional, Type, Callable, Dict
+from typing import List, Any, Type, Callable, Dict
 
 import config
 import lib.progress as progress
@@ -45,8 +43,10 @@ def download_by_url(url: str, dest: Path):
             archive_contents
         ))
 
-        contents_str = archive_contents[0] if len(archive_contents) == 1 else concat(
-            *map(lambda s: '\n\t- ' + str(s), archive_contents)
+        archive_contents.sort(key=lambda x: len(x.name))
+
+        contents_str = archive_contents[0] if len(archive_contents) == 1 else ''.join(
+            '\n\t- ' + str(s) for s in archive_contents
         )
 
         if not archive_contents:
@@ -64,7 +64,7 @@ def download_by_url(url: str, dest: Path):
             dest_folder = util.parent_directory(dest)
             util.print_status('dataset installer',
                               'copying .mtx files',
-                              f'Archive contains more than two .mtx files: {contents_str}',
+                              f'Archive contains more than one .mtx files: {contents_str}',
                               f'\nThey all be put in the {dest_folder}')
 
             srcs = []
@@ -186,12 +186,6 @@ def dataset_type_from_repr(type_name: str) -> DatasetValueType:
     raise Exception(f'Can not build dataset type from {type_name}')
 
 
-@dataclass
-class DatasetProperties:
-    directed: Optional[bool]
-    element_type: Optional[DatasetValueType]
-
-
 class Dataset:
     def __init__(self, name: str):
         self.name = name
@@ -212,19 +206,41 @@ class Dataset:
         def calculate_type():
             matrix_data = matrix.load(self.path)
             return str(dataset_type_from_type(matrix.value_type(matrix_data)))
-        return dataset_type_from_repr(DatasetPropertiesCache.get_or_eval(
-            self.name,
-            'element_type',
-            calculate_type))
 
-    def get_properties(self) -> DatasetProperties:
-        return DatasetProperties(
-            directed=self.get_directed(),
-            element_type=self.get_element_type())
+        cached_type = DatasetPropertiesCache.get(self.name, 'element_type')
+        if cached_type is None or cached_type == 'unknown':
+            cached_type = calculate_type()
+            DatasetPropertiesCache.set(self.name, 'element_type', cached_type)
+        return dataset_type_from_repr(cached_type)
 
     def get_edges(self) -> int:
         _, _, nvals = matrix.load_header(self.path)
         return nvals
 
+    def get_vertices(self) -> int:
+        n_rows, n_cols, _ = matrix.load_header(self.path)
+        return max(n_rows, n_cols)
+
     def get_category(self) -> config.DatasetSize:
         return config.DatasetSize.from_n_edges(self.get_edges())
+
+    def brief_info(self) -> str:
+        cached_directed = DatasetPropertiesCache.get(self.name, 'directed')
+        cached_element_type = DatasetPropertiesCache.get(self.name, 'element_type')
+
+        if cached_directed is None:
+            cached_directed = self.get_directed()
+        graph_kind = 'directed' if cached_directed else 'undirected'
+
+        if cached_element_type is None or cached_element_type == 'unknown':
+            element_type = str(self.get_element_type())
+        else:
+            element_type = cached_element_type
+
+        return (
+            f'vertices={self.get_vertices()}, '
+            f'edges={self.get_edges()}, '
+            f'{graph_kind}, '
+            f'value_type={element_type}, '
+            f'size={self.get_category().name}'
+        )

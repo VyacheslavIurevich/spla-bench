@@ -1,9 +1,11 @@
 import abc
+import os
+import subprocess
 import statistics
 
 from pathlib import Path
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 import lib.util as util
 import config as config
@@ -21,18 +23,32 @@ class ExecutionResult:
     """
     warm_up: int
     times: List[int]
+    profiling: Optional[object] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    raw_output: str = ""
 
     def avg(self):
-        return statistics.mean(self.times)
+        return statistics.mean(self.times) if self.times else 0.0
 
     def median(self):
-        return statistics.median(self.times)
+        return statistics.median(self.times) if self.times else 0.0
 
     def stdev(self):
-        return statistics.stdev(self.times)
+        return statistics.stdev(self.times) if len(self.times) >= 2 else 0.0
 
     def brief_str(self) -> str:
-        return f'warm_up={self.warm_up:.2f}ms, avg={self.avg():.2f}ms, median={self.median():.2f}ms, stdev={self.stdev():.2f}'
+        result = (
+            f'runs={len(self.times)}, warm_up={self.warm_up:.2f}ms, '
+            f'avg={self.avg():.2f}ms, median={self.median():.2f}ms, '
+            f'stdev={self.stdev():.2f}'
+        )
+        if self.profiling and self.profiling.has_cpu_data():
+            result += ', profile=cpu'
+        if self.profiling and self.profiling.has_flamegraph():
+            result += ', flamegraph'
+        if self.profiling and self.profiling.numeric_metrics:
+            result += f', metrics: {self.profiling.metrics_brief_str()}'
+        return result
 
     def __str__(self) -> str:
         return self.brief_str()
@@ -42,7 +58,10 @@ class ExecutionResult:
 
 
 class Driver:
-    def __init__(self):
+    def __init__(self, profiler_manager: Optional[object] = None):
+        self.profiler_manager = profiler_manager
+        self.executed_commands: List[List[str]] = []
+        self.captured_outputs: List[str] = []
         self.build()
 
     """
@@ -68,6 +87,10 @@ class Driver:
 
     @abc.abstractmethod
     def can_run_tc(self, dataset: Dataset) -> bool:
+        return False
+
+    @abc.abstractmethod
+    def can_run_pr(self, dataset: Dataset) -> bool:
         return False
 
     @abc.abstractmethod
@@ -114,6 +137,19 @@ class Driver:
         pass
 
     @abc.abstractmethod
+    def run_pr(self,
+               dataset: Dataset,
+               num_iterations: int) -> ExecutionResult:
+        """
+        Run pagerank algorithm benchmark.
+
+        :param dataset: Dataset with its properties to run on
+        :param num_iterations: Number of iteration to run
+        :return: execution results
+        """
+        pass
+
+    @abc.abstractmethod
     def tool_name(self) -> ToolName:
         """
         :return: Name of the underhood tool
@@ -126,6 +162,37 @@ class Driver:
     def print_status(self, status: str, *args):
         util.print_status(self.tool_name(), status, *args)
 
+    def check_output(self, command: List, *args, **kwargs):
+        command = [str(value) for value in command]
+        self.executed_commands.append(command)
+        kwargs.setdefault("stderr", subprocess.STDOUT)
+        output = util.check_output(command, *args, **kwargs)
+        self.captured_outputs.append(
+            output.decode("ASCII", errors="replace")
+            if isinstance(output, bytes)
+            else str(output)
+        )
+        return output
+
+    def dependency_revision(self) -> Optional[str]:
+        source_dir = config.TOOL_CONFIG[self.tool_name()].sources
+        root = subprocess.run(
+            ["git", "-C", str(source_dir), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        )
+        if (
+            root.returncode != 0
+            or Path(root.stdout.strip()).resolve() != source_dir.resolve()
+        ):
+            return None
+        result = subprocess.run(
+            ["git", "-C", str(source_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+
     def build(self) -> bool:
         build_tool(self.tool_name())
 
@@ -133,7 +200,8 @@ class Driver:
         can_run = {
             AlgorithmName.bfs: self.can_run_bfs,
             AlgorithmName.sssp: self.can_run_sssp,
-            AlgorithmName.tc: self.can_run_tc
+            AlgorithmName.tc: self.can_run_tc,
+            AlgorithmName.pr: self.can_run_pr
         }
         return can_run[algo](dataset)
 
@@ -145,23 +213,238 @@ class Driver:
         dataset_category = dataset.get_category()
 
         iterations = dataset_category.iterations()
-        source = config.DEFAULT_SOURCE
+
+        if algo in [AlgorithmName.bfs, AlgorithmName.sssp]:
+            source = config.find_best_source(
+                str(dataset.path), str(dataset.name), is_directed=dataset.get_directed()
+            )
+        else:
+            source = config.DEFAULT_SOURCE
 
         self.print_status('run',
                           f'begin {algo.name}',
                           f'iterations={iterations}',
-                          f'soure={source}')
+                          f'source={source}' if algo in [AlgorithmName.bfs, AlgorithmName.sssp] else '')
 
         result: ExecutionResult = None
+        self.executed_commands = []
+        self.captured_outputs = []
 
-        if algo == AlgorithmName.bfs:
-            result = self.run_bfs(dataset, source, iterations)
-        elif algo == AlgorithmName.sssp:
-            result = self.run_sssp(dataset, source, iterations)
-        elif algo == AlgorithmName.tc:
-            result = self.run_tc(dataset, iterations)
+        if self.profiler_manager:
+            result = self._run_with_profiling(dataset, algo, source, iterations)
+        else:
+            if algo == AlgorithmName.bfs:
+                result = self.run_bfs(dataset, source, iterations)
+            elif algo == AlgorithmName.sssp:
+                result = self.run_sssp(dataset, source, iterations)
+            elif algo == AlgorithmName.tc:
+                result = self.run_tc(dataset, iterations)
+            elif algo == AlgorithmName.pr:
+                result = self.run_pr(dataset, iterations)
+
+        if len(result.times) != iterations:
+            raise RuntimeError(
+                f"{self.tool_name()} {algo} produced {len(result.times)} "
+                f"measured samples, expected {iterations}"
+            )
+
+        result.raw_output = "\n".join(self.captured_outputs)
+        result.metadata.update({
+            "tool": str(self.tool_name()),
+            "backend": "gpu" if self.tool_name() == ToolName.spla else "cpu",
+            "dependency_revision": self.dependency_revision(),
+            "algorithm": str(algo),
+            "dataset": dataset.name,
+            "dataset_path": str(dataset.path),
+            "input_vertices": dataset.get_vertices(),
+            "input_edges": dataset.get_edges(),
+            "directed": dataset.get_directed(),
+            "source_vertex": (
+                source if algo in [AlgorithmName.bfs, AlgorithmName.sssp]
+                else None
+            ),
+            "configured_measured_runs": iterations,
+            "warm_up_runs": 1,
+            "commands": self.executed_commands,
+            "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+        })
 
         self.print_status(
             'run', f'finish {str(algo.name)}', result.brief_str())
 
         return result
+
+    def _run_with_profiling(self,
+                            dataset: Dataset,
+                            algo: AlgorithmName,
+                            source: int,
+                            iterations: int) -> ExecutionResult:
+        if self.profiler_manager.profiles_individual_flamegraph_runs():
+            return self._run_with_median_flamegraph(
+                dataset, algo, source, iterations)
+
+        command = self._build_command(dataset, algo, source, iterations)
+        self.executed_commands.append([str(value) for value in command])
+        try:
+            profiling_result = self.profiler_manager.run_profiling(
+                command, self.tool_name(), dataset, algo, iterations)
+        finally:
+            self._cleanup_profile_command()
+
+        result = self._parse_profiled_output(
+            dataset, algo, profiling_result.raw_output, iterations)
+        if profiling_result.raw_output:
+            self.captured_outputs.append(profiling_result.raw_output)
+        profiling_result.add_metric('benchmark.time', result.times, 'ms')
+        profiling_result.add_metric('benchmark.warm_up', [result.warm_up], 'ms')
+        profiling_result.metadata['completed_runs'] = len(result.times)
+        self.profiler_manager.write_profile_summary(profiling_result)
+        result.profiling = profiling_result
+        return result
+
+    def _run_with_median_flamegraph(self,
+                                    dataset: Dataset,
+                                    algo: AlgorithmName,
+                                    source: int,
+                                    iterations: int) -> ExecutionResult:
+        candidates = []
+        candidate_results = []
+        valid_timings = []
+
+        for run_index in range(1, iterations + 1):
+            command = self._build_command(dataset, algo, source, 1)
+            self.executed_commands.append([str(value) for value in command])
+            try:
+                candidate = self.profiler_manager.run_flamegraph_candidate(
+                    command,
+                    self.tool_name(),
+                    dataset,
+                    algo,
+                    run_index)
+                candidate_result = self._parse_profiled_output(
+                    dataset, algo, candidate.raw_output, 1)
+                if candidate.raw_output:
+                    self.captured_outputs.append(candidate.raw_output)
+            finally:
+                self._cleanup_profile_command()
+
+            candidates.append(candidate)
+            candidate_results.append(candidate_result)
+            if candidate_result.times:
+                process_time = candidate_result.avg()
+                valid_timings.append((len(candidates) - 1, process_time))
+                self.print_status(
+                    'profile run',
+                    f'dataset={dataset.name}',
+                    f'run={run_index}/{iterations}',
+                    f'execution_time={process_time:.2f}ms')
+            else:
+                self.print_status(
+                    'profile run',
+                    f'dataset={dataset.name}',
+                    f'run={run_index}/{iterations}',
+                    'execution_time=unavailable')
+
+        if valid_timings:
+            median_time = statistics.median(
+                timing for _, timing in valid_timings)
+            selected_index, selected_time = min(
+                valid_timings,
+                key=lambda item: abs(item[1] - median_time))
+            times = [timing for _, timing in valid_timings]
+            warm_up = candidate_results[selected_index].warm_up
+        else:
+            median_time = None
+            selected_time = None
+            selected_index = None
+            times = []
+            warm_up = 0.0
+
+        profiling_result = self.profiler_manager.finalize_flamegraph_candidates(
+            candidates,
+            selected_index,
+            self.tool_name(),
+            dataset,
+            algo,
+            iterations)
+
+        counters_result = None
+        if self.profiler_manager.collects_hardware_counters():
+            counters_command = self._build_command(
+                dataset, algo, source, iterations)
+            try:
+                counters_result = self.profiler_manager.run_hardware_counters(
+                    counters_command,
+                    self.tool_name(),
+                    dataset,
+                    algo,
+                    iterations)
+            finally:
+                self._cleanup_profile_command()
+
+        if counters_result is not None:
+            profiling_result.cpu_hardware_counters = (
+                counters_result.cpu_hardware_counters
+            )
+            profiling_result.cpu_hardware_counters_file = (
+                counters_result.cpu_hardware_counters_file
+            )
+            profiling_result.merge_metrics_from(counters_result)
+            profiling_result.metadata.update({
+                'hardware_counters': (
+                    'collected_in_separate_perf_stat_pass'
+                    if counters_result.cpu_hardware_counters
+                    else 'separate_perf_stat_pass_failed'
+                ),
+                'hardware_counter_profiled_processes': 1,
+            })
+
+        profiling_result.metadata['profiled_processes'] = (
+            len(candidates)
+            + int(counters_result is not None)
+        )
+        profiling_result.metadata['profile_passes'] = (
+            ['flamegraph_callgraph']
+            + (
+                ['cpu_hardware_counters']
+                if counters_result is not None
+                else []
+            )
+        )
+        profiling_result.metadata['profile_pass_count'] = len(
+            profiling_result.metadata['profile_passes'])
+        profiling_result.metadata.update({
+            'completed_runs': len(times),
+            'representative_execution_time_ms': selected_time,
+            'median_execution_time_ms': median_time,
+        })
+        profiling_result.add_metric('benchmark.time', times, 'ms')
+        profiling_result.add_metric('benchmark.warm_up', [warm_up], 'ms')
+        profiling_result.add_metric(
+            'cpu.benchmark_iterations', [iterations], 'runs')
+        self.profiler_manager.write_profile_summary(profiling_result)
+
+        result = ExecutionResult(warm_up=warm_up, times=times)
+        if selected_index is not None:
+            result.metadata.update(candidate_results[selected_index].metadata)
+        elif candidate_results:
+            result.metadata.update(candidate_results[0].metadata)
+        result.profiling = profiling_result
+        return result
+
+    def _build_command(self,
+                       dataset: Dataset,
+                       algo: AlgorithmName,
+                       source: int,
+                       iterations: int) -> List[str]:
+        raise NotImplementedError("Subclasses must implement _build_command")
+
+    def _cleanup_profile_command(self) -> None:
+        pass
+
+    def _parse_profiled_output(self,
+                               dataset: Dataset,
+                               algo: AlgorithmName,
+                               raw_output: Optional[str],
+                               iterations: int) -> ExecutionResult:
+        return ExecutionResult(warm_up=0.0, times=[])

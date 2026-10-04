@@ -24,7 +24,7 @@ def rebuild(builder: Callable[[], None], targets: List[Path]):
     builder()
     if not check_paths_exist(targets):
         not_built = '\n\t' + \
-            '\n\t'.join(filter(lambda t: not t.exists(), targets))
+            '\n\t'.join(str(t) for t in targets if not Path(t).exists())
         raise Exception(f'Not all targets were built:{not_built}')
 
 

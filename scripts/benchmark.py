@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from pathlib import Path
 
 from typing import List
 
@@ -18,14 +19,35 @@ from drivers.driver_spla import DriverSpla
 from drivers.driver import Driver
 
 
-def tool_to_driver(tool: ToolName) -> Driver:
+def parse_output_format(value: str) -> OutputFormat:
+    try:
+        return OutputFormat(value)
+    except ValueError:
+        try:
+            return OutputFormat[value]
+        except KeyError:
+            choices = ', '.join(sorted({f.name for f in OutputFormat} |
+                                       {f.value for f in OutputFormat}))
+            raise argparse.ArgumentTypeError(
+                f"invalid output format: {value} (choose from: {choices})")
+
+
+def tool_to_driver(tool: ToolName, profiler_manager=None) -> Driver:
     drivers = {
-        ToolName.spla: lambda _: DriverSpla(),
-        ToolName.lagraph: lambda _: DriverLaGraph(),
+        ToolName.spla: lambda _: DriverSpla(profiler_manager),
+        ToolName.lagraph: lambda _: DriverLaGraph(profiler_manager),
         ToolName.gunrock: lambda _: DriverGunrock(),
         ToolName.graphblast: lambda _: DriverGraphBLAST(),
     }
     return drivers[tool](None)
+
+
+def tool_backend(tool: ToolName) -> str:
+    backends = {
+        ToolName.spla: 'gpu',
+        ToolName.lagraph: 'cpu',
+    }
+    return backends.get(tool, 'unknown')
 
 
 def main():
@@ -44,7 +66,7 @@ def main():
                         default=config.BENCHMARK_OUTPUT,
                         help='File to dump benchmark results')
     parser.add_argument('--format',
-                        type=OutputFormat,
+                        type=parse_output_format,
                         choices=list(OutputFormat),
                         default=OutputFormat.csv,
                         help='Format to dump benchmark results')
@@ -53,14 +75,33 @@ def main():
                         choices=list(ResultsPrinter),
                         default=ResultsPrinter.all,
                         help='Measurement printer')
+    parser.add_argument('--cpu-profile',
+                        action='store_true',
+                        help='Enable CPU profiling')
+    parser.add_argument('--flamegraph',
+                        action='store_true',
+                        help='perf record callgraphs + flamegraph HTML/SVG (LAGraph and spla host CPU)')
 
     args = parser.parse_args()
 
+    summary = BenchmarkSummary()
+    run_output_dir = summary.prepare_output_dir(Path(args.output))
+
+    profiler_manager = None
+    if args.cpu_profile or args.flamegraph:
+        from profiling.profiler_manager import create_profiler_manager
+
+        profiler_manager = create_profiler_manager(
+            cpu=args.cpu_profile or args.flamegraph,
+            flamegraph=args.flamegraph,
+            hardware_counters=args.cpu_profile,
+            output_dir=run_output_dir / 'profiling')
+
     drivers: List[Driver] = []
     if args.tool is None:
-        drivers = map(tool_to_driver, list(ToolName))
+        drivers = list(map(lambda tool: tool_to_driver(tool, profiler_manager), list(ToolName)))
     else:
-        drivers = [tool_to_driver(args.tool)]
+        drivers = [tool_to_driver(args.tool, profiler_manager)]
 
     algorithms: List[AlgorithmName] = []
     if args.algo is None:
@@ -71,13 +112,18 @@ def main():
     def print_status(status: str, *args):
         util.print_status('benchmark', status, *args)
 
-    summary = BenchmarkSummary()
-
     try:
+        backend_info = ', '.join(
+            f'{driver.tool_name()}={tool_backend(driver.tool_name())}'
+            for driver in drivers)
+        print_status('configuration', f'backends: {backend_info}')
+
         for dataset_name in config.BENCHMARK_DATASETS:
             print_status(f'dataset {dataset_name}', 'start preparation')
             dataset = Dataset(dataset_name)
-            print_status(f'dataset {dataset_name}', 'finish preparation')
+            print_status(f'dataset {dataset_name}', 'finish preparation',
+                         dataset.brief_info(),
+                         f'runs_per_benchmark={dataset.get_category().iterations()}')
 
             for algo in algorithms:
                 status_algo_dataset = f'algo: {algo}, dataset: {dataset.name}'
@@ -99,12 +145,22 @@ def main():
                     status = f'algo: {algo}, dataset: {dataset.name}, tool: {str(driver.tool_name())}'
                     print_status(status, 'start benchmarking')
                     result = driver.run(dataset, algo)
-                    print_status(status, 'finish benchmarking')
+                    print_status(
+                        status,
+                        'finish benchmarking',
+                        f'actual_runs={len(result.times)}',
+                        f'configured_runs={dataset.get_category().iterations()}')
                     summary.add_measurement(
                         driver.tool_name(), dataset, algo, result)
                 print_status(status_algo_dataset, 'finish benchmarking')
     finally:
-        summary.dump(args.format, args.output, args.printer)
+        summary.dump(
+            args.format,
+            Path(args.output),
+            args.printer,
+            run_output_dir=run_output_dir)
+        if profiler_manager:
+            profiler_manager.cleanup()
 
 
 if __name__ == '__main__':

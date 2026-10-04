@@ -12,6 +12,12 @@ import lib.util as util
 from lib.tool import ToolName
 from lib.algorithm import AlgorithmName
 
+# To select the starting vertex
+import numpy as np
+from scipy.io import mmread
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+
 
 """
 System information
@@ -98,9 +104,10 @@ TOOL_CONFIG: Dict[ToolName, ToolConfigurations] = {
         sources=DEPS / 'lagraph',
         build=DEPS / 'lagraph' / 'build',
         algo_rel={
-            AlgorithmName.bfs:  Path('sources') / 'benchmark' / 'bfs_demo',
-            AlgorithmName.sssp: Path('sources') / 'benchmark' / 'sssp_demo',
-            AlgorithmName.tc:   Path('sources') / 'benchmark' / 'tc_demo'
+            AlgorithmName.bfs:  Path('src') / 'benchmark' / 'bfs_demo',
+            AlgorithmName.sssp: Path('src') / 'benchmark' / 'sssp_demo',
+            AlgorithmName.tc:   Path('src') / 'benchmark' / 'tc_demo',
+            AlgorithmName.pr:   Path('src') / 'benchmark' / 'gappagerank_demo'
         },
         config=Namespace()
     ),
@@ -109,9 +116,10 @@ TOOL_CONFIG: Dict[ToolName, ToolConfigurations] = {
         sources=DEPS / 'spla',
         build=DEPS / 'spla' / 'build',
         algo_rel={
-            AlgorithmName.bfs:  Path('spla_bfs'),
-            AlgorithmName.sssp: Path('spla_sssp'),
-            AlgorithmName.tc:   Path('spla_tc')
+            AlgorithmName.bfs:  Path('bfs'),
+            AlgorithmName.sssp: Path('sssp'),
+            AlgorithmName.tc:   Path('tc'),
+            AlgorithmName.pr:   Path('pr')
         },
         config=Namespace()
     ),
@@ -183,7 +191,7 @@ CONDA_GRB_REPO = Namespace(
 )
 
 """
-Suitesparse.GraphBLAST installation information
+SuiteSparse.GraphBLAS installation information
 
 [MUTABLE]
 
@@ -199,12 +207,15 @@ and set corresponding values to non-null values
 SUITESPARSE = Namespace(
 
     # Paths to the local version of suitesparse
-    local=Namespace(
-        # Path to the include directory (Ex. "../graphblas/include/")
-        include=None,
-        # Path to the library (Ex. "../graphblas/lib/libgraphblas.so")
-        library=None
-    ),
+    local=None,
+
+    # Uncomment, if you want to use a local SuiteSparse.GraphBLAS build
+    # local=Namespace(
+    #     # Path to the include directory (Ex. "../graphblas/include/")
+    #     include=None,
+    #     # Path to the library (Ex. "../graphblas/lib/libgraphblas.so")
+    #     library=None
+    # ),
 
     # GitHub repository information
     repo=Namespace(
@@ -212,7 +223,7 @@ SUITESPARSE = Namespace(
         branch='v6.1.4',
 
         # Repository local path (where it will be cloned)
-        dest=DEPS/'suitesparse_graphblast',
+        dest=DEPS/'suitesparse_graphblas',
 
         # Relative path to the include directory from the repository root
         include_rel=Path('Include'),
@@ -230,7 +241,7 @@ SUITESPARSE = Namespace(
     # Uncomment, if you want to download the library
     # download=Namespace(
     #     url=f'https://anaconda.org/conda-forge/graphblas/{CONDA_GRB_REPO.version}/download/{CONDA_GRB_REPO.platform}/graphblas-{CONDA_GRB_REPO.version}-{CONDA_GRB_REPO.hash}_0.tar.bz2',
-    #     dest=DEPS/'suitesparse_graphblast_conda',
+    #     dest=DEPS/'suitesparse_graphblas_conda',
     #     include_rel=Path('include'),
     #     library_rel=Path('lib') / 'libgraphblas' + TARGET_SUFFIX
     # )
@@ -284,7 +295,7 @@ class DatasetSize(Enum):
     small = DatasetSizeInfo(max_n_edges=80000, iterations=20)
     medium = DatasetSizeInfo(max_n_edges=500000, iterations=10)
     large = DatasetSizeInfo(max_n_edges=2000000, iterations=5)
-    extra_large = DatasetSizeInfo(max_n_edges=None, iterations=2)
+    extra_large = DatasetSizeInfo(max_n_edges=None, iterations=3)
 
     def iterations(self):
         return self.value.iterations
@@ -324,17 +335,19 @@ Note: All datasets are taken from http://sparse.tamu.edu/
 
 """
 DATASET_URL: Dict[str, str] = {
-    '1128_bus': 'https://suitesparse-collection-website.herokuapp.com/MM/HB/1138_bus.tar.gz',
-    'bcspwr03': 'https://suitesparse-collection-website.herokuapp.com/MM/HB/bcspwr03.tar.gz',
-    'soc-LiveJournal': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/soc-LiveJournal1.tar.gz',
-    'hollywood-09': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/hollywood-2009.tar.gz',
-    'Journals': 'https://suitesparse-collection-website.herokuapp.com/MM/Pajek/Journals.tar.gz',
-    'com-Orcut': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/com-Orkut.tar.gz',
-    'roadNet-CA': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/roadNet-CA.tar.gz',
-    'indochina-2004': 'https://suitesparse-collection-website.herokuapp.com/MM/LAW/indochina-2004.tar.gz',
-    'cit-Patents': 'https://suitesparse-collection-website.herokuapp.com/MM/SNAP/cit-Patents.tar.gz',
-    'coAuthorsCiteseer': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coAuthorsCiteseer.tar.gz',
-    'coPapersDBLP': 'https://suitesparse-collection-website.herokuapp.com/MM/DIMACS10/coPapersDBLP.tar.gz'
+    'coAuthorsCiteseer': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/coAuthorsCiteseer.tar.gz?download=1',
+    'coPapersDBLP': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/coPapersDBLP.tar.gz?download=1',
+    'amazon-2008': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/amazon-2008.tar.gz?download=1',
+    'hollywood-2009': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/hollywood-2009.tar.gz?download=1',
+    'belgium_osm': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/belgium_osm.tar.gz?download=1',
+    'roadNet-CA': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/roadNet-CA.tar.gz?download=1',
+    'com-Orkut': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/com-Orkut.tar.gz?download=1',
+    'cit-Patents': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/cit-Patents.tar.gz?download=1',
+    'rgg_n_2_22_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_22_s0.tar.gz?download=1',
+    'soc-LiveJournal1': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/soc-LiveJournal1.tar.gz?download=1',
+    'indochina-2004': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/indochina-2004.tar.gz?download=1',
+    'rgg_n_2_23_s0': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/rgg_n_2_23_s0.tar.gz?download=1',
+    'road_central': 'http://media.githubusercontent.com/media/VyacheslavIurevich/graphs-theory-datasets/main/road_central.tar.gz?download=1'
 }
 
 
@@ -346,6 +359,56 @@ Default source for the path-finding algorithms (bfs, sssp)
 """
 DEFAULT_SOURCE = 0
 
+# Process-local cache to avoid recalculating a source for the same dataset.
+_source_cache: Dict[str, int] = {}
+
+
+def find_best_source(mtx_path: str, dataset_name: str, is_directed: bool) -> int:
+    """
+    The vertex with the median degree in the largest connected component.
+    Returns a 0-based index.
+    """
+    print(f"Finding best source vertex for {dataset_name}")
+    if dataset_name in _source_cache:
+        return _source_cache[dataset_name]
+
+    mat = mmread(mtx_path)
+    A = csr_matrix(mat)
+    A.data[:] = 1
+    n = A.shape[0]
+
+    if is_directed:
+        _, labels = connected_components(
+            A, directed=True, connection='strong', return_labels=True)
+    else:
+        _, labels = connected_components(
+            A, directed=False, return_labels=True)
+
+    component_sizes = np.bincount(labels)
+    largest_id = int(np.argmax(component_sizes))
+    largest_size = component_sizes[largest_id]
+    print(f"  Largest component: {largest_size} vertices ({100.0 * largest_size / n:.1f}%)")
+
+    vertices = np.where(labels == largest_id)[0]
+    degrees = np.array(A[vertices].sum(axis=1)).flatten()
+
+    non_sink_mask = degrees > 0
+    if non_sink_mask.sum() == 0:
+        print("  Warning: all vertices in largest component are sinks, picking first")
+        best_vertex = int(vertices[0])
+    else:
+        vertices = vertices[non_sink_mask]
+        degrees = degrees[non_sink_mask]
+        median_degree = np.median(degrees)
+        closest_idx = int(np.argmin(np.abs(degrees - median_degree)))
+        best_vertex = int(vertices[closest_idx])
+        print(f"  Best source: vertex={best_vertex}, "
+              f"out_degree={int(degrees[closest_idx])}, "
+              f"median={median_degree:.1f}")
+
+    _source_cache[dataset_name] = best_vertex
+    return best_vertex
+
 
 """
 List of the datasets, which will be used for the benchmark
@@ -356,16 +419,19 @@ or to the .mtx
 
 """
 BENCHMARK_DATASETS = [
-    '1128_bus',
-    'bcspwr03',
-    'soc-LiveJournal',
-    'hollywood-09',
-    'com-Orcut',
-    'roadNet-CA',
-    'indochina-2004',
-    'cit-Patents',
+    # Main comparison uses only undirected datasets. Directed collections
+    # require a separate experiment because stock spla examples symmetrize
+    # their Matrix Market input.
     'coAuthorsCiteseer',
-    'coPapersDBLP'
+    'coPapersDBLP',
+    # crashes on LaGraph BFS
+    # 'hollywood-2009',
+    'belgium_osm',
+    'roadNet-CA',
+    'com-Orkut',
+    'rgg_n_2_22_s0',
+    'rgg_n_2_23_s0',
+    'road_central'
 ]
 
 """
@@ -407,3 +473,29 @@ def make_build_env() -> Dict[str, str]:
     print(f'Using env: {additional_vars}')
 
     return env
+
+
+"""
+Profiling configuration
+
+[MUTABLE]
+
+"""
+
+@dataclass
+class ProfilingConfig:
+    cpu_profiling: bool = False
+    flamegraph: bool = False
+    hardware_counters: bool = False
+
+
+"""
+Path to directory for profiling results
+
+After each profiling run, results will be stored here.
+Each run creates a timestamped subdirectory.
+
+[MUTABLE]
+
+"""
+PROFILING_OUTPUT = ROOT / 'profiling'
