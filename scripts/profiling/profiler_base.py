@@ -147,11 +147,6 @@ class Profiler(ABC):
         pass
 
     @abstractmethod
-    def profile(self, command: List[str], metadata: Dict[str, Any]) -> ProfileResult:
-        """Run profiling on command"""
-        pass
-
-    @abstractmethod
     def parse_results(self, raw_output: bytes) -> Dict[str, Any]:
         """Parse profiling results"""
         pass
